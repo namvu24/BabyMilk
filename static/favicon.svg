@@ -1,0 +1,20 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
+  <!-- Bottle cap -->
+  <rect x="24" y="4" width="16" height="6" rx="2" fill="#90CAF9"/>
+  <!-- Bottle neck -->
+  <rect x="26" y="10" width="12" height="8" fill="#90CAF9"/>
+  <!-- Shoulder transition -->
+  <path d="M20 18 Q18 26 18 30 L46 30 Q46 26 44 18 Z" fill="#BBDEFB"/>
+  <!-- Bottle body -->
+  <rect x="18" y="30" width="28" height="28" rx="4" fill="#BBDEFB"/>
+  <!-- Milk fill -->
+  <rect x="18" y="42" width="28" height="16" rx="4" fill="white"/>
+  <!-- Measurement lines -->
+  <line x1="22" y1="36" x2="28" y2="36" stroke="#90CAF9" stroke-width="1.5" stroke-linecap="round"/>
+  <line x1="22" y1="40" x2="28" y2="40" stroke="#90CAF9" stroke-width="1.5" stroke-linecap="round"/>
+  <line x1="22" y1="44" x2="28" y2="44" stroke="#64B5F6" stroke-width="1.5" stroke-linecap="round"/>
+  <line x1="22" y1="48" x2="28" y2="48" stroke="#64B5F6" stroke-width="1.5" stroke-linecap="round"/>
+  <line x1="22" y1="52" x2="28" y2="52" stroke="#64B5F6" stroke-width="1.5" stroke-linecap="round"/>
+  <!-- Bottle outline -->
+  <path d="M24 4 h16 a2 2 0 0 1 2 2 v4 h2 q2 8 2 12 v28 a4 4 0 0 1-4 4 H20 a4 4 0 0 1-4-4 V22 q0-4 2-12 h2 V6 a2 2 0 0 1 2-2 Z" fill="none" stroke="#1E88E5" stroke-width="2"/>
+</svg>
