@@ -1,0 +1,9 @@
+# Environment secrets
+.env
+
+# Go build output
+milkapp
+
+# IDE
+.idea/
+.vscode/
