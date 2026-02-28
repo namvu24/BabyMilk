@@ -1,4 +1,4 @@
-# MilkApp Test Runner (PowerShell)
+# BabyMilk Test Runner (PowerShell)
 # Usage: .\scripts\test.ps1 [-Mode unit|integration|all|coverage|report]
 
 param(
@@ -43,9 +43,9 @@ function Stop-TestDB {
 function Run-IntegrationTests {
     Write-Host "=== Running Integration Tests ===" -ForegroundColor Green
     Start-TestDB
-    $env:TEST_DATABASE_URL = "postgres://testuser:testpass@localhost:5433/milkapp_test?sslmode=disable"
+    $env:TEST_DATABASE_URL = "postgres://testuser:testpass@localhost:5433/babymilk_test?sslmode=disable"
     try {
-        go test ./... -v -count=1 -tags=integration -run "Integration|API_" 2>&1 | Tee-Object -FilePath test-output-integration.txt
+        go test ./... -v -count=1 -tags=integration -run "Integration|API_"2>&1 | Tee-Object -FilePath test-output-integration.txt
     }
     finally {
         Stop-TestDB
@@ -59,9 +59,9 @@ function Run-AllTests {
     Run-UnitTestsWithCoverage
 
     Start-TestDB
-    $env:TEST_DATABASE_URL = "postgres://testuser:testpass@localhost:5433/milkapp_test?sslmode=disable"
+    $env:TEST_DATABASE_URL = "postgres://testuser:testpass@localhost:5433/babymilk_test?sslmode=disable"
     try {
-        go test ./... -v -count=1 -tags=integration -coverprofile=coverage-integration.out -covermode=atomic 2>&1 | Tee-Object -FilePath test-output-integration.txt
+        go test ./... -v -count=1 -tags=integration -coverprofile=coverage-integration.out-covermode=atomic 2>&1 | Tee-Object -FilePath test-output-integration.txt
     }
     finally {
         Stop-TestDB

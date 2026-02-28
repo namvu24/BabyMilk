@@ -13,7 +13,7 @@ import (
 func InitDB() (*sql.DB, error) {
 	dsn := os.Getenv("DATABASE_URL")
 	if dsn == "" {
-		dsn = "postgres://postgres:postgres@localhost:5432/milkapp?sslmode=disable"
+		dsn = "postgres://postgres:postgres@localhost:5432/babymilk?sslmode=disable"
 	}
 	db, err := sql.Open("postgres", dsn)
 	if err != nil {

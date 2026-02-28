@@ -1,16 +1,16 @@
 #!/bin/bash
-# Tear down k3d cluster for MilkApp
+# Tear down k3d cluster for BabyMilk
 set -e
 
-CLUSTER_NAME="milkapp"
-NAMESPACE="milkapp"
+CLUSTER_NAME="babymilk"
+NAMESPACE="babymilk"
 
-echo "=== Tearing down MilkApp k3d environment ==="
+echo "=== Tearing down BabyMilk k3d environment ==="
 
 # Uninstall Helm release and delete cluster
 if k3d cluster list 2>/dev/null | grep -q "$CLUSTER_NAME"; then
     echo "Uninstalling Helm release..."
-    helm uninstall milkapp -n "$NAMESPACE" 2>/dev/null || true
+    helm uninstall babymilk -n "$NAMESPACE" 2>/dev/null || true
 
     echo "Deleting k3d cluster..."
     k3d cluster delete "$CLUSTER_NAME"

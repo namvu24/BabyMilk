@@ -6,7 +6,7 @@ import (
 	"os"
 	"strings"
 
-	"milkapp/internal/app"
+	"babymilk/internal/app"
 )
 
 func main() {
@@ -33,7 +33,7 @@ func main() {
 
 	handler := corsMiddleware(mux)
 
-	log.Printf("MilkApp server starting on http://localhost:%s", port)
+	log.Printf("BabyMilk server starting on http://localhost:%s", port)
 	log.Fatal(http.ListenAndServe(":"+port, handler))
 }
 

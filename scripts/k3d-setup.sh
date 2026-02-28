@@ -1,8 +1,8 @@
 #!/bin/bash
-# Create k3d cluster for MilkApp
+# Create k3d cluster for BabyMilk
 set -e
 
-CLUSTER_NAME="milkapp"
+CLUSTER_NAME="babymilk"
 
 # Create cluster if it doesn't exist
 if k3d cluster list | grep -q "$CLUSTER_NAME"; then

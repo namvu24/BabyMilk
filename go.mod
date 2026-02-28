@@ -1,4 +1,4 @@
-module milkapp
+module babymilk
 
 go 1.25.0
 

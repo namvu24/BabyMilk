@@ -1,11 +1,11 @@
-# MilkApp - Baby Milk Consumption Tracker
+# BabyMilk - Baby Milk Consumption Tracker
 
 A simple web app to track your baby's milk consumption, built with Go, PostgreSQL, and vanilla HTML/JS.
 
 ## Project Structure
 
 ```
-milkapp/
+babymilk/
 ├── cmd/
 │   └── server/
 │       ├── main.go              # Entry point, HTTP server & routing
@@ -49,21 +49,21 @@ milkapp/
 ### 1. Create the PostgreSQL database
 
 ```sql
-CREATE DATABASE milkapp;
+CREATE DATABASE babymilk;
 ```
 
 ### 2. Set environment variables (optional)
 
 | Variable       | Default                                                        | Description             |
 |----------------|----------------------------------------------------------------|-------------------------|
-| `DATABASE_URL` | `postgres://postgres:postgres@localhost:5432/milkapp?sslmode=disable` | PostgreSQL connection string |
+| `DATABASE_URL` | `postgres://postgres:postgres@localhost:5432/babymilk?sslmode=disable` | PostgreSQL connection string |
 | `PORT`         | `8080`                                                         | HTTP server port        |
 
 ### 3. Build and run
 
 ```bash
-go build -o milkapp.exe ./cmd/server
-.\milkapp.exe
+go build -o babymilk.exe ./cmd/server
+.\babymilk.exe
 ```
 
 Or run directly:
@@ -116,7 +116,7 @@ For a production-like local setup using Kubernetes:
 # ./scripts/k3d-teardown.sh      # Linux/macOS
 ```
 
-The Helm chart and K8s manifests are in the separate [`milkapp-deploy`](../milkapp-deploy/) repo for GitOps workflows. See its [README](../milkapp-deploy/README.md) for full details.
+The Helm chart and K8s manifests are in the separate [`babymilk-deploy`](../babymilk-deploy/) repo for GitOps workflows. See its [README](../babymilk-deploy/README.md) for full details.
 
 ## Features
 
@@ -181,6 +181,35 @@ Open `coverage.html` in a browser to view a visual coverage report.
 
 ### Run integration tests
 
+## CI/CD
+
+Automated CI/CD is handled by GitHub Actions. Three workflows exist:
+
+| Workflow | Trigger | Actions |
+|----------|---------|---------|
+| **CI** (`ci.yml`) | PR to `main` | Run unit + integration tests |
+| **Build & Push** (`build-push.yml`) | Push to `main` | Test → build → push image (`main-<sha>` + `latest`) → update dev |
+| **Release** (`release.yml`) | Tag `v*` | Test → build → push image (`v1.x.x` + `stable`) → update prod → GitHub Release |
+
+### Required GitHub Secrets
+
+Configure these in the BabyMilk repo **Settings → Secrets and variables → Actions**:
+
+| Secret | Description |
+|--------|-------------|
+| `DOCKERHUB_USERNAME` | Docker Hub username (e.g., `namvu24`) |
+| `DOCKERHUB_TOKEN` | Docker Hub access token ([create here](https://hub.docker.com/settings/security)) |
+| `DEPLOY_REPO_TOKEN` | GitHub PAT with `repo` scope and write access to `namvu24/babymilk-deploy` |
+
+### Creating a release
+
+```bash
+git tag v1.0.0
+git push origin v1.0.0
+```
+
+This triggers the Release workflow which builds the image, pushes it as `v1.0.0` + `stable`, updates the production values in `babymilk-deploy`, and creates a GitHub Release with auto-generated notes.
+
 Integration tests require Docker to spin up a PostgreSQL container.
 
 ```bash
@@ -188,7 +217,7 @@ Integration tests require Docker to spin up a PostgreSQL container.
 docker compose -f docker-compose.test.yml up -d --wait
 
 # Run integration tests
-TEST_DATABASE_URL="postgres://testuser:testpass@localhost:5433/milkapp_test?sslmode=disable" \
+TEST_DATABASE_URL="postgres://testuser:testpass@localhost:5433/babymilk_test?sslmode=disable" \
   go test ./... -v -count=1 -tags=integration
 
 # Stop and clean up the test database

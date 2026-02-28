@@ -5,7 +5,7 @@ param(
 
 $ErrorActionPreference = "Stop"
 
-$Image = "jrbalrog9/babymilk:$Tag"
+$Image = "namvu24/babymilk:$Tag"
 $ProjectDir = Split-Path $PSScriptRoot -Parent
 
 # Check Docker Hub login

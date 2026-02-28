@@ -1,16 +1,16 @@
 #!/bin/bash
-# Deploy MilkApp to local k3d cluster
+# Deploy BabyMilk to local k3d cluster
 set -e
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_DIR="$(dirname "$SCRIPT_DIR")"
-DEPLOY_DIR="$(dirname "$PROJECT_DIR")/milkapp-deploy"
-CHART_DIR="$DEPLOY_DIR/charts/milkapp"
-NAMESPACE="milkapp"
-RELEASE_NAME="milkapp"
+DEPLOY_DIR="$(dirname "$PROJECT_DIR")/babymilk-deploy"
+CHART_DIR="$DEPLOY_DIR/charts/babymilk"
+NAMESPACE="babymilk"
+RELEASE_NAME="babymilk"
 TAG="${1:-latest}"
 
-echo "=== MilkApp Local Deployment ==="
+echo "=== BabyMilk Local Deployment ==="
 echo ""
 
 # Step 1: Build and push image
@@ -33,9 +33,9 @@ echo "[3/3] Verifying deployment..."
 kubectl get pods -n "$NAMESPACE"
 echo ""
 echo "=== Deployment complete ==="
-echo "Access MilkApp at: http://localhost:8080"
+echo "Access BabyMilk at: http://localhost:8080"
 echo ""
 echo "Useful commands:"
 echo "  kubectl get all -n $NAMESPACE"
-echo "  kubectl logs -n $NAMESPACE -l app.kubernetes.io/name=milkapp"
+echo "  kubectl logs -n $NAMESPACE -l app.kubernetes.io/name=babymilk"
 echo "  helm status $RELEASE_NAME -n $NAMESPACE"

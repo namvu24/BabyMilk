@@ -3,7 +3,7 @@
 set -e
 
 TAG="${1:-latest}"
-IMAGE="jrbalrog9/babymilk:$TAG"
+IMAGE="namvu24/babymilk:$TAG"
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_DIR="$(dirname "$SCRIPT_DIR")"

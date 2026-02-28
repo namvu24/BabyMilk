@@ -1,4 +1,4 @@
-# Deploy MilkApp to local k3d cluster
+# Deploy BabyMilk to local k3d cluster
 param(
     [string]$Tag = "latest"
 )
@@ -7,12 +7,12 @@ $ErrorActionPreference = "Stop"
 
 $ScriptDir = $PSScriptRoot
 $ProjectDir = Split-Path $ScriptDir -Parent
-$DeployDir = Join-Path (Split-Path $ProjectDir -Parent) "milkapp-deploy"
-$ChartDir = Join-Path $DeployDir "charts\milkapp"
-$Namespace = "milkapp"
-$ReleaseName = "milkapp"
+$DeployDir = Join-Path (Split-Path $ProjectDir -Parent) "babymilk-deploy"
+$ChartDir = Join-Path $DeployDir "charts\babymilk"
+$Namespace = "babymilk"
+$ReleaseName = "babymilk"
 
-Write-Host "=== MilkApp Local Deployment ===" -ForegroundColor Green
+Write-Host "=== BabyMilk Local Deployment ===" -ForegroundColor Green
 Write-Host ""
 
 # Step 1: Build and push image
@@ -35,9 +35,9 @@ Write-Host "[3/3] Verifying deployment..." -ForegroundColor Yellow
 kubectl get pods -n $Namespace
 Write-Host ""
 Write-Host "=== Deployment complete ===" -ForegroundColor Green
-Write-Host "Access MilkApp at: http://localhost:8080"
+Write-Host "Access BabyMilk at: http://localhost:8080"
 Write-Host ""
 Write-Host "Useful commands:"
 Write-Host "  kubectl get all -n $Namespace"
-Write-Host "  kubectl logs -n $Namespace -l app.kubernetes.io/name=milkapp"
+Write-Host "  kubectl logs -n $Namespace -l app.kubernetes.io/name=babymilk"
 Write-Host "  helm status $ReleaseName -n $Namespace"

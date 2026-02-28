@@ -1,7 +1,7 @@
-# Create k3d cluster for MilkApp
+# Create k3d cluster for BabyMilk
 $ErrorActionPreference = "Stop"
 
-$ClusterName = "milkapp"
+$ClusterName = "babymilk"
 
 # Create cluster if it doesn't exist
 $clusters = k3d cluster list -o json 2>$null | ConvertFrom-Json

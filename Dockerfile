@@ -4,12 +4,12 @@ WORKDIR /app
 COPY go.mod go.sum ./
 RUN go mod download
 COPY . .
-RUN CGO_ENABLED=0 go build -o milkapp ./cmd/server
+RUN CGO_ENABLED=0 go build -o babymilk ./cmd/server
 
 FROM alpine:3.19
 RUN apk --no-cache add ca-certificates
 WORKDIR /app
-COPY --from=builder /app/milkapp .
+COPY --from=builder /app/babymilk .
 COPY --from=builder /app/static ./static
 EXPOSE 8080
-CMD ["./milkapp"]
+CMD ["./babymilk"]
