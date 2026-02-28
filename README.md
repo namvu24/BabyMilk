@@ -99,9 +99,9 @@ docker compose down -v
 For a production-like local setup using Kubernetes:
 
 ```bash
-# Prerequisites: Docker, k3d, helm, kubectl
+# Prerequisites: Docker (logged in to Docker Hub), k3d, helm, kubectl
 
-# 1. Create k3d cluster with local registry
+# 1. Create k3d cluster
 .\scripts\k3d-setup.ps1          # Windows
 # ./scripts/k3d-setup.sh         # Linux/macOS
 
