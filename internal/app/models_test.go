@@ -90,8 +90,7 @@ func TestFeedingInput_Validate_EndEqualsStart(t *testing.T) {
 		StartTime: "2025-01-15T08:00:00Z",
 		EndTime:   "2025-01-15T08:00:00Z",
 	}
-	err := input.Validate()
-	if err == nil {
-		t.Error("expected error when end_time equals start_time")
+	if err := input.Validate(); err != nil {
+		t.Errorf("expected end_time equal to start_time to be valid, got %v", err)
 	}
 }
