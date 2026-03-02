@@ -1,6 +1,6 @@
 # Build and push MilkApp Docker image to Docker Hub
 param(
-    [string]$Tag = "latest"
+    [string]$Tag = (git rev-parse --short HEAD)
 )
 
 $ErrorActionPreference = "Stop"

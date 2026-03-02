@@ -1,13 +1,13 @@
 # Deploy BabyMilk to local k3d cluster
 param(
-    [string]$Tag = "latest"
+    [string]$Tag = (git rev-parse --short HEAD)
 )
 
 $ErrorActionPreference = "Stop"
 
 $ScriptDir = $PSScriptRoot
 $ProjectDir = Split-Path $ScriptDir -Parent
-$DeployDir = Join-Path (Split-Path $ProjectDir -Parent) "babymilk-deploy"
+$DeployDir = Join-Path (Split-Path $ProjectDir -Parent) "milkapp-deploy"
 $ChartDir = Join-Path $DeployDir "charts\babymilk"
 $Namespace = "babymilk"
 $ReleaseName = "babymilk"
@@ -16,7 +16,7 @@ Write-Host "=== BabyMilk Local Deployment ===" -ForegroundColor Green
 Write-Host ""
 
 # Step 1: Build and push image
-Write-Host "[1/3] Building and pushing Docker image..." -ForegroundColor Yellow
+Write-Host "[1/3] Building and pushing Docker image with tag $Tag..." -ForegroundColor Yellow
 & "$ScriptDir\build-image.ps1" -Tag $Tag
 Write-Host ""
 
