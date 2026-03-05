@@ -125,13 +125,22 @@ func (s *Server) HandleDailyTotals(w http.ResponseWriter, r *http.Request) {
 		respondError(w, http.StatusMethodNotAllowed, "method not allowed")
 		return
 	}
-	days := 7
-	if d := r.URL.Query().Get("days"); d != "" {
-		if parsed, err := strconv.Atoi(d); err == nil && parsed > 0 {
-			days = parsed
+
+	var totals []DailyTotal
+	var err error
+
+	if month := r.URL.Query().Get("month"); month != "" {
+		totals, err = s.Repo.GetDailyTotalsByMonth(month)
+	} else {
+		days := 7
+		if d := r.URL.Query().Get("days"); d != "" {
+			if parsed, err := strconv.Atoi(d); err == nil && parsed > 0 {
+				days = parsed
+			}
 		}
+		totals, err = s.Repo.GetDailyTotals(days)
 	}
-	totals, err := s.Repo.GetDailyTotals(days)
+
 	if err != nil {
 		respondError(w, http.StatusInternalServerError, err.Error())
 		return

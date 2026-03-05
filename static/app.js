@@ -2,6 +2,39 @@ const API = '/api/feedings';
 let dailyChart = null;
 let feedingStartTime = null;
 let timerInterval = null;
+let toastTimer = null;
+
+function showToast(message, type = 'success') {
+    const toast = document.getElementById('toast');
+    toast.textContent = message;
+    toast.style.backgroundColor = type === 'success' ? '#198754' : '#dc3545';
+    toast.style.display = 'block';
+    toast.style.opacity = '1';
+    clearTimeout(toastTimer);
+    toastTimer = setTimeout(() => {
+        toast.style.opacity = '0';
+        setTimeout(() => { toast.style.display = 'none'; }, 300);
+    }, 2000);
+}
+
+function toggleDarkMode() {
+    const html = document.documentElement;
+    const isDark = html.getAttribute('data-bs-theme') === 'dark';
+    const next = isDark ? 'light' : 'dark';
+    html.setAttribute('data-bs-theme', next);
+    document.getElementById('darkModeBtn').textContent = next === 'dark' ? '☀️' : '🌙';
+    localStorage.setItem('theme', next);
+}
+
+// Apply saved theme on load
+(function () {
+    const saved = localStorage.getItem('theme') ||
+        (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light');
+    document.documentElement.setAttribute('data-bs-theme', saved);
+    document.addEventListener('DOMContentLoaded', () => {
+        document.getElementById('darkModeBtn').textContent = saved === 'dark' ? '☀️' : '🌙';
+    });
+})();
 
 function toggleFeeding() {
     const btn = document.getElementById('startStopBtn');
@@ -57,7 +90,36 @@ document.addEventListener('DOMContentLoaded', () => {
     document.getElementById('monthFilter').value = ym;
     loadFeedings();
     loadDailyTotals();
+    loadQuickAmounts();
     document.getElementById('feedingForm').addEventListener('submit', handleSubmit);
+
+    // Snap time inputs to nearest 5 minutes on change
+    ['startTime', 'endTime'].forEach(id => {
+        document.getElementById(id).addEventListener('change', (e) => {
+            const val = e.target.value;
+            if (val) {
+                e.target.value = toLocalISO(roundTo5Min(new Date(val)));
+            }
+        });
+    });
+
+    // Event delegation for edit/delete buttons
+    document.getElementById('feedingsByDay').addEventListener('click', (e) => {
+        const editBtn = e.target.closest('[data-edit-id]');
+        if (editBtn) {
+            editFeeding(
+                parseInt(editBtn.dataset.editId),
+                parseInt(editBtn.dataset.amount),
+                decodeURIComponent(editBtn.dataset.start),
+                decodeURIComponent(editBtn.dataset.end)
+            );
+            return;
+        }
+        const deleteBtn = e.target.closest('[data-delete-id]');
+        if (deleteBtn) {
+            deleteFeeding(parseInt(deleteBtn.dataset.deleteId));
+        }
+    });
 });
 
 function toLocalISO(date) {
@@ -94,11 +156,9 @@ async function loadFeedings() {
 
 function renderFeedings(feedings) {
     const container = document.getElementById('feedingsByDay');
-    const totalEl = document.getElementById('feedingsTotal');
 
     if (!feedings || feedings.length === 0) {
         container.innerHTML = '<p class="text-center text-muted py-3">No feedings recorded</p>';
-        totalEl.textContent = '';
         return;
     }
 
@@ -116,17 +176,20 @@ function renderFeedings(feedings) {
     container.innerHTML = days.map(day => {
         const items = groups[day];
         const dayTotal = items.reduce((s, f) => s + f.amount_ml, 0);
-        const rows = items.map(f => `
+        const rows = items.map(f => {
+            const startISO = encodeURIComponent(f.start_time);
+            const endISO = encodeURIComponent(f.end_time);
+            return `
             <tr>
                 <td data-label="Start">${formatTime(f.start_time)}</td>
                 <td data-label="End">${formatTime(f.end_time)}</td>
                 <td data-label="Amount">${f.amount_ml} ml</td>
                 <td>
-                    <button class="btn btn-sm btn-outline-primary" onclick="editFeeding(${f.id}, ${f.amount_ml}, '${f.start_time}', '${f.end_time}')">Edit</button>
-                    <button class="btn btn-sm btn-outline-danger" onclick="deleteFeeding(${f.id})">Delete</button>
+                    <button class="btn btn-sm btn-outline-primary" data-edit-id="${f.id}" data-amount="${f.amount_ml}" data-start="${startISO}" data-end="${endISO}">Edit</button>
+                    <button class="btn btn-sm btn-outline-danger" data-delete-id="${f.id}">Delete</button>
                 </td>
             </tr>
-        `).join('');
+        `}).join('');
         return `
             <div class="mb-3">
                 <div class="d-flex justify-content-between align-items-center bg-light px-3 py-2 rounded-top border">
@@ -143,9 +206,6 @@ function renderFeedings(feedings) {
                 </div>
             </div>`;
     }).join('');
-
-    const monthTotal = feedings.reduce((s, f) => s + f.amount_ml, 0);
-    totalEl.textContent = `Month Total: ${monthTotal} ml`;
 }
 
 async function handleSubmit(e) {
@@ -173,8 +233,10 @@ async function handleSubmit(e) {
         document.getElementById('feedingForm').reset();
         setDefaultTimes();
         cancelEdit();
+        showToast(id ? 'Feeding updated' : 'Feeding added');
         loadFeedings();
         loadDailyTotals();
+        loadQuickAmounts();
     } catch (err) {
         console.error('Failed to save feeding:', err);
     }
@@ -188,6 +250,10 @@ function editFeeding(id, amount, startTime, endTime) {
     document.getElementById('formTitle').textContent = 'Edit Feeding';
     document.getElementById('submitBtn').textContent = 'Update';
     document.getElementById('cancelBtn').classList.remove('d-none');
+
+    // Scroll to form and focus amount field
+    document.getElementById('feedingForm').scrollIntoView({ behavior: 'smooth', block: 'center' });
+    document.getElementById('amountMl').focus();
 }
 
 function cancelEdit() {
@@ -201,16 +267,46 @@ async function deleteFeeding(id) {
     if (!confirm('Delete this feeding?')) return;
     try {
         await fetch(`${API}/${id}`, { method: 'DELETE' });
+        showToast('Feeding deleted');
         loadFeedings();
         loadDailyTotals();
+        loadQuickAmounts();
     } catch (err) {
         console.error('Failed to delete feeding:', err);
     }
 }
 
+async function loadQuickAmounts() {
+    try {
+        const res = await fetch(API + '?_t=' + Date.now());
+        const feedings = await res.json();
+        updateQuickAmounts(feedings);
+    } catch (err) {
+        console.error('Failed to load quick amounts:', err);
+    }
+}
+
+function updateQuickAmounts(feedings) {
+    const container = document.getElementById('quickAmounts');
+    if (!feedings || feedings.length === 0) {
+        container.innerHTML = '';
+        return;
+    }
+    const lastAmount = feedings[0].amount_ml;
+    const steps = [-20, -10, 0, 10, 20];
+    container.innerHTML = steps.map(s => {
+        const val = Math.max(1, lastAmount + s);
+        const active = 'btn-outline-secondary';
+        return `<button type="button" class="btn ${active} px-3 py-2" style="min-width:56px;font-size:1.1rem" onclick="document.getElementById('amountMl').value=${val}">${val}</button>`;
+    }).join('');
+}
+
 async function loadDailyTotals() {
     try {
-        const res = await fetch(`${API}/daily?days=7`);
+        console.log('Loading daily totals...');
+        const month = document.getElementById('monthFilter').value;
+        const url = month ? `${API}/daily?month=${month}` : `${API}/daily?days=31`;
+        const res = await fetch(url);
         const totals = await res.json();
         renderChart(totals);
     } catch (err) {

@@ -133,3 +133,26 @@ func (r *PostgresRepository) GetDailyTotals(days int) ([]DailyTotal, error) {
 	}
 	return totals, rows.Err()
 }
+
+func (r *PostgresRepository) GetDailyTotalsByMonth(month string) ([]DailyTotal, error) {
+	rows, err := r.DB.Query(
+		`SELECT start_time::date AS date, SUM(amount_ml) AS total_ml
+		 FROM feedings
+		 WHERE to_char(start_time, 'YYYY-MM') = $1
+		 GROUP BY start_time::date
+		 ORDER BY date`, month)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var totals []DailyTotal
+	for rows.Next() {
+		var t DailyTotal
+		if err := rows.Scan(&t.Date, &t.TotalML); err != nil {
+			return nil, err
+		}
+		totals = append(totals, t)
+	}
+	return totals, rows.Err()
+}

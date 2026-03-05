@@ -7,4 +7,5 @@ type Repository interface {
 	UpdateFeeding(id int, input FeedingInput) (Feeding, error)
 	DeleteFeeding(id int) error
 	GetDailyTotals(days int) ([]DailyTotal, error)
+	GetDailyTotalsByMonth(month string) ([]DailyTotal, error)
 }

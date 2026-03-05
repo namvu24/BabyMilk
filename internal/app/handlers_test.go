@@ -73,6 +73,11 @@ func (m *mockRepository) GetDailyTotals(days int) ([]DailyTotal, error) {
 	return m.dailyTotals, m.dailyErr
 }
 
+func (m *mockRepository) GetDailyTotalsByMonth(month string) ([]DailyTotal, error) {
+	m.lastDate = month
+	return m.dailyTotals, m.dailyErr
+}
+
 func validFeedingJSON() string {
 	return `{"amount_ml":120,"start_time":"2025-01-15T08:00:00Z","end_time":"2025-01-15T08:15:00Z"}`
 }

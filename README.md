@@ -118,6 +118,39 @@ For a production-like local setup using Kubernetes:
 
 The Helm chart and K8s manifests are in the separate [`babymilk-deploy`](../babymilk-deploy/) repo for GitOps workflows. See its [README](../babymilk-deploy/README.md) for full details.
 
+### Multi-Environment Setup (homelab)
+
+Deploy dev and prod environments on a remote laptop (`homelab`) with ArgoCD:
+
+```bash
+# 1. Create k3d clusters on homelab (via SSH)
+./scripts/k3d-remote-setup.sh
+
+# 2. Merge kubeconfigs into main machine
+./scripts/kubeconfig-setup.sh          # Linux/macOS
+# .\scripts\kubeconfig-setup.ps1       # Windows
+
+# 3. Install ArgoCD and apply Application manifests
+./scripts/argocd-setup.sh
+
+# Switch between environments
+kubectl config use-context k3d-babymilk-dev
+kubectl config use-context k3d-babymilk-prod
+kubectl config use-context k3d-babymilk          # local testing
+
+# Access apps
+# Local:  http://localhost:8080
+# Dev:    http://homelab:8081
+# Prod:   http://homelab:8082
+
+# ArgoCD UI (port-forward)
+kubectl --context k3d-babymilk-dev port-forward svc/argocd-server -n argocd 9080:443
+# Then open: https://localhost:9080
+
+# Teardown remote clusters
+./scripts/k3d-remote-teardown.sh
+```
+
 ## Features
 
 - **Add feedings** — record amount (ml), start time, and end time

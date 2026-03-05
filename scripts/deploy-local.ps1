@@ -32,6 +32,8 @@ Write-Host ""
 
 # Step 3: Wait and show status
 Write-Host "[3/3] Verifying deployment..." -ForegroundColor Yellow
+kubectl rollout restart deployment -n $Namespace
+kubectl rollout status deployment -n $Namespace --timeout=2m
 kubectl get pods -n $Namespace
 Write-Host ""
 Write-Host "=== Deployment complete ===" -ForegroundColor Green

@@ -2,6 +2,27 @@ body {
     background-color: #f8f9fa;
 }
 
+[data-bs-theme="dark"] body {
+    background-color: #212529;
+}
+
+[data-bs-theme="dark"] .bg-light {
+    background-color: #2c3034 !important;
+}
+
+[data-bs-theme="dark"] .border {
+    border-color: #444 !important;
+}
+
+[data-bs-theme="dark"] .table tbody tr {
+    background: #2c3034;
+    border-color: #444;
+}
+
+[data-bs-theme="dark"] .table tbody td {
+    border-bottom-color: #3a3f44;
+}
+
 h1 {
     color: #495057;
 }
@@ -46,6 +67,11 @@ input, select, textarea {
         margin-bottom: 0.75rem;
         padding: 0.25rem 0.5rem;
         background: #fff;
+    }
+
+    [data-bs-theme="dark"] .table tbody tr {
+        background: #2c3034;
+        border-color: #444;
     }
 
     .table-striped > tbody > tr:nth-of-type(odd) > * {
