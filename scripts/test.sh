@@ -47,7 +47,7 @@ stop_test_db() {
 run_integration_tests() {
     echo -e "${GREEN}=== Running Integration Tests ===${NC}"
     start_test_db
-    export TEST_DATABASE_URL="postgres://testuser:testpass@localhost:5433/babymilk_test?sslmode=disable"
+    export DATABASE_URL="postgres://testuser:testpass@localhost:5433/babymilk_test?sslmode=disable"
     go test ./... -v -count=1 -tags=integration -run "Integration|API_" 2>&1 | tee test-output-integration.txt
     local exit_code=${PIPESTATUS[0]}
     stop_test_db
@@ -63,7 +63,7 @@ run_all_tests() {
     
     # Integration tests
     start_test_db
-    export TEST_DATABASE_URL="postgres://testuser:testpass@localhost:5433/babymilk_test?sslmode=disable"
+    export DATABASE_URL="postgres://testuser:testpass@localhost:5433/babymilk_test?sslmode=disable"
     go test ./... -v -count=1 -tags=integration -coverprofile=coverage-integration.out -covermode=atomic 2>&1 | tee test-output-integration.txt
     stop_test_db
     
