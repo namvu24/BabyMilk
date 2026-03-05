@@ -250,7 +250,7 @@ Integration tests require Docker to spin up a PostgreSQL container.
 docker compose -f docker-compose.test.yml up -d --wait
 
 # Run integration tests
-TEST_DATABASE_URL="postgres://testuser:testpass@localhost:5433/babymilk_test?sslmode=disable" \
+DATABASE_URL="postgres://testuser:testpass@localhost:5433/babymilk_test?sslmode=disable" \
   go test ./... -v -count=1 -tags=integration
 
 # Stop and clean up the test database

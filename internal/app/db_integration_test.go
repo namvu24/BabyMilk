@@ -17,7 +17,7 @@ var testDB *sql.DB
 var testRepo *PostgresRepository
 
 func TestMain(m *testing.M) {
-	dsn := os.Getenv("TEST_DATABASE_URL")
+	dsn := os.Getenv("DATABASE_URL")
 	if dsn == "" {
 		dsn = "postgres://testuser:testpass@localhost:5433/babymilk_test?sslmode=disable"
 	}
