@@ -52,12 +52,12 @@ input, select, textarea {
 
 /* Chart wrapper responsive height */
 #chartWrapper {
-    height: 200px;
+    height: 300px;
 }
 
 @media (max-width: 575.98px) {
     #chartWrapper {
-        height: 280px;
+        height: 400px;
     }
 
     h1 {

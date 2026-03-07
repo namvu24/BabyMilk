@@ -1,9 +1,24 @@
+// ── Global state ──
 const API = '/api/feedings';
-let dailyChart = null;
-let feedingStartTime = null;
-let timerInterval = null;
-let toastTimer = null;
 
+// ── Logger ──
+// Logs are shown on localhost / dev hostnames and suppressed in production
+const isDev = ['localhost', '127.0.0.1', ''].includes(location.hostname)
+    || location.hostname.includes('dev') || location.port !== '';
+const log = {
+    debug: (...args) => isDev && console.log('[DEBUG]', ...args),
+    info:  (...args) => isDev && console.info('[INFO]', ...args),
+    warn:  (...args) => console.warn('[WARN]', ...args),   // always show warnings
+    error: (...args) => console.error('[ERROR]', ...args),  // always show errors
+};
+
+let dailyChart = null;        // Chart.js instance (destroyed & recreated on each render)
+let feedingStartTime = null;  // Date object when Start Feeding was pressed (null = idle)
+let timerInterval = null;     // setInterval ID for the live stopwatch
+let toastTimer = null;        // setTimeout ID so we can cancel overlapping toasts
+
+// ── Toast notification ──
+// Shows a brief message at the top of the screen (green for success, red for error)
 function showToast(message, type = 'success') {
     const toast = document.getElementById('toast');
     toast.textContent = message;
@@ -17,6 +32,7 @@ function showToast(message, type = 'success') {
     }, 2000);
 }
 
+// ── Dark mode toggle ──
 function toggleDarkMode() {
     const html = document.documentElement;
     const isDark = html.getAttribute('data-bs-theme') === 'dark';
@@ -36,6 +52,8 @@ function toggleDarkMode() {
     });
 })();
 
+// ── Start / Stop feeding timer ──
+// Toggles between recording a feeding (live stopwatch) and stopping it
 function toggleFeeding() {
     const btn = document.getElementById('startStopBtn');
     const timerEl = document.getElementById('feedingTimer');
@@ -76,12 +94,15 @@ function toggleFeeding() {
     }
 }
 
+// ── Form helpers ──
+// Set both time inputs to "now" (used on page load and after form submit)
 function setDefaultTimes() {
     const now = toLocalISO(new Date());
     document.getElementById('startTime').value = now;
     document.getElementById('endTime').value = now;
 }
 
+// Set end time input to current time ("Now" button)
 function setEndTimeNow() {
     document.getElementById('endTime').value = toLocalISO(new Date());
 }
@@ -131,16 +152,20 @@ document.addEventListener('DOMContentLoaded', () => {
     });
 });
 
+// ── Date/time utilities ──
+// Convert a Date to "YYYY-MM-DDTHH:MM" for datetime-local inputs
 function toLocalISO(date) {
     const off = date.getTimezoneOffset();
     const local = new Date(date.getTime() - off * 60000);
     return local.toISOString().slice(0, 16);
 }
 
+// Convert datetime-local value to RFC 3339 (UTC) for the API
 function toRFC3339(datetimeLocal) {
     return new Date(datetimeLocal).toISOString();
 }
 
+// Format ISO timestamp to short time string (e.g. "08:30")
 function formatTime(iso) {
     return new Date(iso).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
 }
@@ -149,6 +174,8 @@ function formatDate(iso) {
     return new Date(iso).toLocaleDateString();
 }
 
+// ── Month navigation ──
+// Shift the month picker by +1 or -1 month and reload data
 function changeMonth(delta) {
     const input = document.getElementById('monthFilter');
     const [y, m] = input.value.split('-').map(Number);
@@ -158,6 +185,8 @@ function changeMonth(delta) {
     loadDailyTotals();
 }
 
+// ── Feedings list ──
+// Fetch feedings from API (filtered by selected month) and render them
 async function loadFeedings() {
     const monthFilter = document.getElementById('monthFilter').value;
     let url = API;
@@ -168,10 +197,11 @@ async function loadFeedings() {
         const feedings = await res.json();
         renderFeedings(feedings);
     } catch (err) {
-        console.error('Failed to load feedings:', err);
+        log.error('Failed to load feedings:', err);
     }
 }
 
+// Group feedings by day and render as collapsible day cards with a table per day
 function renderFeedings(feedings) {
     const container = document.getElementById('feedingsByDay');
 
@@ -225,6 +255,7 @@ function renderFeedings(feedings) {
     }).join('');
 }
 
+// ── Form submit (add or update) ──
 async function handleSubmit(e) {
     e.preventDefault();
     const id = document.getElementById('editId').value;
@@ -255,10 +286,12 @@ async function handleSubmit(e) {
         loadDailyTotals();
         loadQuickAmounts();
     } catch (err) {
-        console.error('Failed to save feeding:', err);
+        log.error('Failed to save feeding:', err);
     }
 }
 
+// ── Edit mode ──
+// Populate form with existing feeding data for editing
 function editFeeding(id, amount, startTime, endTime) {
     document.getElementById('editId').value = id;
     document.getElementById('amountMl').value = amount;
@@ -274,6 +307,7 @@ function editFeeding(id, amount, startTime, endTime) {
     document.getElementById('amountMl').focus();
 }
 
+// Reset form back to "Add" mode
 function cancelEdit() {
     document.getElementById('editId').value = '';
     document.getElementById('formTitle').textContent = 'Add Feeding';
@@ -281,6 +315,7 @@ function cancelEdit() {
     document.getElementById('cancelBtn').classList.add('d-none');
 }
 
+// ── Delete ──
 async function deleteFeeding(id) {
     if (!confirm('Delete this feeding?')) return;
     try {
@@ -290,20 +325,23 @@ async function deleteFeeding(id) {
         loadDailyTotals();
         loadQuickAmounts();
     } catch (err) {
-        console.error('Failed to delete feeding:', err);
+        log.error('Failed to delete feeding:', err);
     }
 }
 
+// ── Quick amount buttons ──
+// Fetch only the last feeding to derive quick-pick amounts (±10, ±20 ml)
 async function loadQuickAmounts() {
     try {
         const res = await fetch(API + '/last');
         const feeding = await res.json();
         updateQuickAmounts(feeding);
     } catch (err) {
-        console.error('Failed to load quick amounts:', err);
+        log.error('Failed to load quick amounts:', err);
     }
 }
 
+// Render 5 quick-pick buttons based on the last feeding's amount
 function updateQuickAmounts(feeding) {
     const container = document.getElementById('quickAmounts');
     if (!feeding) {
@@ -319,22 +357,29 @@ function updateQuickAmounts(feeding) {
     }).join('');
 }
 
+// ── Daily totals chart ──
+// Fetch aggregated daily totals for the selected month and render bar chart
 async function loadDailyTotals() {
     try {
-        console.log('Loading daily totals...');
+        log.debug('Loading daily totals...');
         const month = document.getElementById('monthFilter').value;
         const url = month ? `${API}/daily?month=${month}` : `${API}/daily?days=31`;
         const res = await fetch(url);
         const totals = await res.json();
         renderChart(totals);
     } catch (err) {
-        console.error('Failed to load daily totals:', err);
+        log.error('Failed to load daily totals:', err);
     }
 }
 
+// Render bar chart with day-of-month on x-axis and ml totals on y-axis
 function renderChart(totals) {
     const ctx = document.getElementById('dailyChart').getContext('2d');
-    const labels = totals.map(t => t.date);
+    // Extract day-of-month from "YYYY-MM-DD" date string for x-axis labels
+    const labels = totals.map(t => {
+        const parts = t.date.split('-');   // ["2026", "03", "07"]
+        return parseInt(parts[2], 10);     // 7
+    });
     const data = totals.map(t => t.total_ml);
 
     if (dailyChart) dailyChart.destroy();
@@ -379,7 +424,7 @@ function renderChart(totals) {
                     title: { display: true, text: 'Milliliters (ml)' },
                 },
                 x: {
-                    title: { display: true, text: 'Date' },
+                    title: { display: true, text: 'Day' },
                 },
             },
         },
