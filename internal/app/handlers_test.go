@@ -78,6 +78,16 @@ func (m *mockRepository) GetDailyTotalsByMonth(month string) ([]DailyTotal, erro
 	return m.dailyTotals, m.dailyErr
 }
 
+func (m *mockRepository) GetLastFeeding() (*Feeding, error) {
+	if m.getErr != nil {
+		return nil, m.getErr
+	}
+	if len(m.feedings) == 0 {
+		return nil, nil
+	}
+	return &m.feedings[0], nil
+}
+
 func validFeedingJSON() string {
 	return `{"amount_ml":120,"start_time":"2025-01-15T08:00:00Z","end_time":"2025-01-15T08:15:00Z"}`
 }

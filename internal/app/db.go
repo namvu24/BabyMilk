@@ -68,6 +68,21 @@ func (r *PostgresRepository) GetFeedings(dateFilter string) ([]Feeding, error) {
 	return feedings, rows.Err()
 }
 
+func (r *PostgresRepository) GetLastFeeding() (*Feeding, error) {
+	var f Feeding
+	err := r.DB.QueryRow(
+		`SELECT id, amount_ml, start_time, end_time, created_at, updated_at
+		 FROM feedings ORDER BY created_at DESC LIMIT 1`,
+	).Scan(&f.ID, &f.AmountML, &f.StartTime, &f.EndTime, &f.CreatedAt, &f.UpdatedAt)
+	if err != nil {
+		if err == sql.ErrNoRows {
+			return nil, nil
+		}
+		return nil, err
+	}
+	return &f, nil
+}
+
 func (r *PostgresRepository) CreateFeeding(input FeedingInput) (Feeding, error) {
 	start, _ := time.Parse(time.RFC3339, input.StartTime)
 	end, _ := time.Parse(time.RFC3339, input.EndTime)

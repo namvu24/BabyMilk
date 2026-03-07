@@ -23,6 +23,7 @@ func main() {
 
 	// API routes
 	mux.HandleFunc("/api/feedings/daily", srv.HandleDailyTotals)
+	mux.HandleFunc("/api/feedings/last", srv.HandleLastFeeding)
 	mux.HandleFunc("/api/feedings/", srv.HandleFeedingByID)
 	mux.HandleFunc("/api/feedings", srv.HandleFeedings)
 

@@ -82,6 +82,10 @@ function setDefaultTimes() {
     document.getElementById('endTime').value = now;
 }
 
+function setEndTimeNow() {
+    document.getElementById('endTime').value = toLocalISO(new Date());
+}
+
 document.addEventListener('DOMContentLoaded', () => {
     setDefaultTimes();
     // Default month picker to current month
@@ -92,6 +96,11 @@ document.addEventListener('DOMContentLoaded', () => {
     loadDailyTotals();
     loadQuickAmounts();
     document.getElementById('feedingForm').addEventListener('submit', handleSubmit);
+
+    // Sync slider when amount input changes
+    document.getElementById('amountMl').addEventListener('input', (e) => {
+        document.getElementById('amountSlider').value = e.target.value;
+    });
 
     // Snap time inputs to nearest 5 minutes on change
     ['startTime', 'endTime'].forEach(id => {
@@ -140,6 +149,15 @@ function formatDate(iso) {
     return new Date(iso).toLocaleDateString();
 }
 
+function changeMonth(delta) {
+    const input = document.getElementById('monthFilter');
+    const [y, m] = input.value.split('-').map(Number);
+    const d = new Date(y, m - 1 + delta, 1);
+    input.value = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+    loadFeedings();
+    loadDailyTotals();
+}
+
 async function loadFeedings() {
     const monthFilter = document.getElementById('monthFilter').value;
     let url = API;
@@ -180,13 +198,12 @@ function renderFeedings(feedings) {
             const startISO = encodeURIComponent(f.start_time);
             const endISO = encodeURIComponent(f.end_time);
             return `
-            <tr>
-                <td data-label="Start">${formatTime(f.start_time)}</td>
-                <td data-label="End">${formatTime(f.end_time)}</td>
-                <td data-label="Amount">${f.amount_ml} ml</td>
-                <td>
-                    <button class="btn btn-sm btn-outline-primary" data-edit-id="${f.id}" data-amount="${f.amount_ml}" data-start="${startISO}" data-end="${endISO}">Edit</button>
-                    <button class="btn btn-sm btn-outline-danger" data-delete-id="${f.id}">Delete</button>
+            <tr class="feeding-row">
+                <td class="text-nowrap">${formatTime(f.start_time)} – ${formatTime(f.end_time)}</td>
+                <td><span class="badge bg-primary rounded-pill">${f.amount_ml} ml</span></td>
+                <td class="text-end text-nowrap">
+                    <button class="btn btn-sm btn-outline-primary py-0 px-2" data-edit-id="${f.id}" data-amount="${f.amount_ml}" data-start="${startISO}" data-end="${endISO}">✏️</button>
+                    <button class="btn btn-sm btn-outline-danger py-0 px-2" data-delete-id="${f.id}">🗑</button>
                 </td>
             </tr>
         `}).join('');
@@ -199,7 +216,7 @@ function renderFeedings(feedings) {
                 <div class="table-responsive border border-top-0 rounded-bottom">
                     <table class="table table-sm table-striped mb-0">
                         <thead class="table-light">
-                            <tr><th>Start</th><th>End</th><th>Amount</th><th>Actions</th></tr>
+                            <tr><th>Time</th><th>Amount</th><th class="text-end">Actions</th></tr>
                         </thead>
                         <tbody>${rows}</tbody>
                     </table>
@@ -245,6 +262,7 @@ async function handleSubmit(e) {
 function editFeeding(id, amount, startTime, endTime) {
     document.getElementById('editId').value = id;
     document.getElementById('amountMl').value = amount;
+    document.getElementById('amountSlider').value = amount;
     document.getElementById('startTime').value = toLocalISO(new Date(startTime));
     document.getElementById('endTime').value = toLocalISO(new Date(endTime));
     document.getElementById('formTitle').textContent = 'Edit Feeding';
@@ -278,26 +296,26 @@ async function deleteFeeding(id) {
 
 async function loadQuickAmounts() {
     try {
-        const res = await fetch(API + '?_t=' + Date.now());
-        const feedings = await res.json();
-        updateQuickAmounts(feedings);
+        const res = await fetch(API + '/last');
+        const feeding = await res.json();
+        updateQuickAmounts(feeding);
     } catch (err) {
         console.error('Failed to load quick amounts:', err);
     }
 }
 
-function updateQuickAmounts(feedings) {
+function updateQuickAmounts(feeding) {
     const container = document.getElementById('quickAmounts');
-    if (!feedings || feedings.length === 0) {
+    if (!feeding) {
         container.innerHTML = '';
         return;
     }
-    const lastAmount = feedings[0].amount_ml;
+    const lastAmount = feeding.amount_ml;
     const steps = [-20, -10, 0, 10, 20];
     container.innerHTML = steps.map(s => {
         const val = Math.max(1, lastAmount + s);
         const active = 'btn-outline-secondary';
-        return `<button type="button" class="btn ${active} px-3 py-2" style="min-width:56px;font-size:1.1rem" onclick="document.getElementById('amountMl').value=${val}">${val}</button>`;
+        return `<button type="button" class="btn ${active} py-1 px-0" style="flex:1;min-width:0;font-size:0.85rem" onclick="document.getElementById('amountMl').value=${val};document.getElementById('amountSlider').value=${val}">${val}</button>`;
     }).join('');
 }
 
@@ -353,6 +371,7 @@ function renderChart(totals) {
         },
         options: {
             responsive: true,
+            maintainAspectRatio: false,
             layout: { padding: { top: 24 } },
             scales: {
                 y: {
