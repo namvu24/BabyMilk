@@ -150,3 +150,20 @@ func (s *Server) HandleDailyTotals(w http.ResponseWriter, r *http.Request) {
 	}
 	respondJSON(w, http.StatusOK, totals)
 }
+
+func (s *Server) HandleLastFeeding(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		respondError(w, http.StatusMethodNotAllowed, "method not allowed")
+		return
+	}
+	feeding, err := s.Repo.GetLastFeeding()
+	if err != nil {
+		respondError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	if feeding == nil {
+		respondJSON(w, http.StatusOK, nil)
+		return
+	}
+	respondJSON(w, http.StatusOK, feeding)
+}
