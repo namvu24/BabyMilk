@@ -1,5 +1,6 @@
 // ── Global state ──
 const API = '/api/feedings';
+const TZ = Intl.DateTimeFormat().resolvedOptions().timeZone; // e.g. "Asia/Ho_Chi_Minh"
 
 // ── Logger ──
 // Logs are shown on localhost / dev hostnames and suppressed in production
@@ -61,8 +62,9 @@ function toggleFeeding() {
     if (!feedingStartTime) {
         // START
         feedingStartTime = new Date();
-        document.getElementById('startTime').value = toLocalISO(feedingStartTime);
-        document.getElementById('endTime').value = toLocalISO(feedingStartTime);
+        document.getElementById('feedingDate').value = toLocalDate(feedingStartTime);
+        document.getElementById('startTime').value = toLocalTime(feedingStartTime);
+        document.getElementById('endTime').value = toLocalTime(feedingStartTime);
 
         btn.textContent = '⏹ Stop Feeding';
         btn.classList.replace('btn-success', 'btn-danger');
@@ -77,7 +79,7 @@ function toggleFeeding() {
     } else {
         // STOP
         const now = new Date();
-        document.getElementById('endTime').value = toLocalISO(now);
+        document.getElementById('endTime').value = toLocalTime(now);
 
         clearInterval(timerInterval);
         timerInterval = null;
@@ -95,16 +97,17 @@ function toggleFeeding() {
 }
 
 // ── Form helpers ──
-// Set both time inputs to "now" (used on page load and after form submit)
+// Set date and time inputs to "now" (used on page load and after form submit)
 function setDefaultTimes() {
-    const now = toLocalISO(new Date());
-    document.getElementById('startTime').value = now;
-    document.getElementById('endTime').value = now;
+    const now = new Date();
+    document.getElementById('feedingDate').value = toLocalDate(now);
+    document.getElementById('startTime').value = toLocalTime(now);
+    document.getElementById('endTime').value = toLocalTime(now);
 }
 
 // Set end time input to current time ("Now" button)
 function setEndTimeNow() {
-    document.getElementById('endTime').value = toLocalISO(new Date());
+    document.getElementById('endTime').value = toLocalTime(new Date());
 }
 
 document.addEventListener('DOMContentLoaded', () => {
@@ -126,9 +129,13 @@ document.addEventListener('DOMContentLoaded', () => {
     // Snap time inputs to nearest 5 minutes on change
     ['startTime', 'endTime'].forEach(id => {
         document.getElementById(id).addEventListener('change', (e) => {
-            const val = e.target.value;
+            const val = e.target.value; // "HH:MM"
             if (val) {
-                e.target.value = toLocalISO(roundTo5Min(new Date(val)));
+                const [h, m] = val.split(':').map(Number);
+                const rounded = Math.round(m / 5) * 5;
+                const hrs = rounded === 60 ? (h + 1) % 24 : h;
+                const mins = rounded === 60 ? 0 : rounded;
+                e.target.value = `${String(hrs).padStart(2, '0')}:${String(mins).padStart(2, '0')}`;
             }
         });
     });
@@ -160,14 +167,28 @@ function toLocalISO(date) {
     return local.toISOString().slice(0, 16);
 }
 
+// Extract local date string "YYYY-MM-DD" from a Date
+function toLocalDate(date) {
+    const off = date.getTimezoneOffset();
+    const local = new Date(date.getTime() - off * 60000);
+    return local.toISOString().slice(0, 10);
+}
+
+// Extract local time string "HH:MM" from a Date
+function toLocalTime(date) {
+    const off = date.getTimezoneOffset();
+    const local = new Date(date.getTime() - off * 60000);
+    return local.toISOString().slice(11, 16);
+}
+
 // Convert datetime-local value to RFC 3339 (UTC) for the API
 function toRFC3339(datetimeLocal) {
     return new Date(datetimeLocal).toISOString();
 }
 
-// Format ISO timestamp to short time string (e.g. "08:30")
+// Format ISO timestamp to short 24-hour time string (e.g. "08:30")
 function formatTime(iso) {
-    return new Date(iso).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+    return new Date(iso).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: false });
 }
 
 function formatDate(iso) {
@@ -189,8 +210,8 @@ function changeMonth(delta) {
 // Fetch feedings from API (filtered by selected month) and render them
 async function loadFeedings() {
     const monthFilter = document.getElementById('monthFilter').value;
-    let url = API;
-    if (monthFilter) url += `?month=${monthFilter}`;
+    let url = API + `?tz=${encodeURIComponent(TZ)}`;
+    if (monthFilter) url += `&month=${monthFilter}`;
 
     try {
         const res = await fetch(url);
@@ -259,10 +280,11 @@ function renderFeedings(feedings) {
 async function handleSubmit(e) {
     e.preventDefault();
     const id = document.getElementById('editId').value;
+    const date = document.getElementById('feedingDate').value;
     const data = {
         amount_ml: parseInt(document.getElementById('amountMl').value),
-        start_time: toRFC3339(document.getElementById('startTime').value),
-        end_time: toRFC3339(document.getElementById('endTime').value),
+        start_time: toRFC3339(date + 'T' + document.getElementById('startTime').value),
+        end_time: toRFC3339(date + 'T' + document.getElementById('endTime').value),
     };
 
     try {
@@ -296,8 +318,9 @@ function editFeeding(id, amount, startTime, endTime) {
     document.getElementById('editId').value = id;
     document.getElementById('amountMl').value = amount;
     document.getElementById('amountSlider').value = amount;
-    document.getElementById('startTime').value = toLocalISO(new Date(startTime));
-    document.getElementById('endTime').value = toLocalISO(new Date(endTime));
+    document.getElementById('feedingDate').value = toLocalDate(new Date(startTime));
+    document.getElementById('startTime').value = toLocalTime(new Date(startTime));
+    document.getElementById('endTime').value = toLocalTime(new Date(endTime));
     document.getElementById('formTitle').textContent = 'Edit Feeding';
     document.getElementById('submitBtn').textContent = 'Update';
     document.getElementById('cancelBtn').classList.remove('d-none');
@@ -363,7 +386,8 @@ async function loadDailyTotals() {
     try {
         log.debug('Loading daily totals...');
         const month = document.getElementById('monthFilter').value;
-        const url = month ? `${API}/daily?month=${month}` : `${API}/daily?days=31`;
+        const tzParam = `tz=${encodeURIComponent(TZ)}`;
+        const url = month ? `${API}/daily?${tzParam}&month=${month}` : `${API}/daily?${tzParam}&days=31`;
         const res = await fetch(url);
         const totals = await res.json();
         renderChart(totals);

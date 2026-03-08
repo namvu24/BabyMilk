@@ -25,7 +25,7 @@ type mockRepository struct {
 	lastInput   FeedingInput
 }
 
-func (m *mockRepository) GetFeedings(date string) ([]Feeding, error) {
+func (m *mockRepository) GetFeedings(date string, tz string) ([]Feeding, error) {
 	m.lastDate = date
 	return m.feedings, m.getErr
 }
@@ -68,12 +68,12 @@ func (m *mockRepository) DeleteFeeding(id int) error {
 	return m.deleteErr
 }
 
-func (m *mockRepository) GetDailyTotals(days int) ([]DailyTotal, error) {
+func (m *mockRepository) GetDailyTotals(days int, tz string) ([]DailyTotal, error) {
 	m.lastDays = days
 	return m.dailyTotals, m.dailyErr
 }
 
-func (m *mockRepository) GetDailyTotalsByMonth(month string) ([]DailyTotal, error) {
+func (m *mockRepository) GetDailyTotalsByMonth(month string, tz string) ([]DailyTotal, error) {
 	m.lastDate = month
 	return m.dailyTotals, m.dailyErr
 }

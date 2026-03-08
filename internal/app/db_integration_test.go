@@ -95,7 +95,7 @@ func TestGetFeedings_Integration(t *testing.T) {
 	seedFeeding(t, 100, "2025-01-15T08:00:00Z", "2025-01-15T08:10:00Z")
 	seedFeeding(t, 200, "2025-01-15T09:00:00Z", "2025-01-15T09:15:00Z")
 
-	feedings, err := testRepo.GetFeedings("")
+	feedings, err := testRepo.GetFeedings("", "")
 	if err != nil {
 		t.Fatalf("GetFeedings failed: %v", err)
 	}
@@ -109,7 +109,7 @@ func TestGetFeedings_WithDateFilter_Integration(t *testing.T) {
 	seedFeeding(t, 100, "2025-01-15T08:00:00Z", "2025-01-15T08:10:00Z")
 	seedFeeding(t, 200, "2025-01-16T09:00:00Z", "2025-01-16T09:15:00Z")
 
-	feedings, err := testRepo.GetFeedings("2025-01-15")
+	feedings, err := testRepo.GetFeedings("2025-01-15", "")
 	if err != nil {
 		t.Fatalf("GetFeedings with date filter failed: %v", err)
 	}
@@ -148,7 +148,7 @@ func TestDeleteFeeding_Integration(t *testing.T) {
 		t.Fatalf("DeleteFeeding failed: %v", err)
 	}
 
-	feedings, _ := testRepo.GetFeedings("")
+	feedings, _ := testRepo.GetFeedings("", "")
 	if len(feedings) != 0 {
 		t.Errorf("expected 0 feedings after delete, got %d", len(feedings))
 	}
@@ -177,7 +177,7 @@ func TestGetDailyTotals_Integration(t *testing.T) {
 		fmt.Sprintf("%sT09:00:00Z", today),
 		fmt.Sprintf("%sT09:15:00Z", today))
 
-	totals, err := testRepo.GetDailyTotals(7)
+	totals, err := testRepo.GetDailyTotals(7, "")
 	if err != nil {
 		t.Fatalf("GetDailyTotals failed: %v", err)
 	}

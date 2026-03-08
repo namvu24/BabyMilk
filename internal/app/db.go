@@ -37,17 +37,20 @@ func NewPostgresRepository(db *sql.DB) *PostgresRepository {
 	return &PostgresRepository{DB: db}
 }
 
-func (r *PostgresRepository) GetFeedings(dateFilter string) ([]Feeding, error) {
+func (r *PostgresRepository) GetFeedings(dateFilter string, tz string) ([]Feeding, error) {
+	if tz == "" {
+		tz = "UTC"
+	}
 	query := `SELECT id, amount_ml, start_time, end_time, created_at, updated_at FROM feedings`
 	var args []interface{}
 	if len(dateFilter) == 7 {
-		// YYYY-MM month filter
-		query += ` WHERE to_char(start_time AT TIME ZONE 'UTC', 'YYYY-MM') = $1`
-		args = append(args, dateFilter)
+		// YYYY-MM month filter — convert to client timezone before comparing
+		query += ` WHERE to_char(start_time AT TIME ZONE $1, 'YYYY-MM') = $2`
+		args = append(args, tz, dateFilter)
 	} else if len(dateFilter) == 10 {
-		// YYYY-MM-DD date filter
-		query += ` WHERE start_time::date = $1`
-		args = append(args, dateFilter)
+		// YYYY-MM-DD date filter — convert to client timezone before comparing
+		query += ` WHERE (start_time AT TIME ZONE $1)::date = $2`
+		args = append(args, tz, dateFilter)
 	}
 	query += ` ORDER BY start_time DESC`
 
@@ -123,16 +126,20 @@ func (r *PostgresRepository) DeleteFeeding(id int) error {
 	return nil
 }
 
-func (r *PostgresRepository) GetDailyTotals(days int) ([]DailyTotal, error) {
+func (r *PostgresRepository) GetDailyTotals(days int, tz string) ([]DailyTotal, error) {
 	if days <= 0 {
 		days = 7
 	}
+	if tz == "" {
+		tz = "UTC"
+	}
+	// Convert UTC start_time to client timezone before extracting the date
 	rows, err := r.DB.Query(
-		`SELECT start_time::date AS date, SUM(amount_ml) AS total_ml
+		`SELECT (start_time AT TIME ZONE $1)::date AS date, SUM(amount_ml) AS total_ml
 		 FROM feedings
-		 WHERE start_time >= NOW() - INTERVAL '1 day' * $1
-		 GROUP BY start_time::date
-		 ORDER BY date`, days)
+		 WHERE start_time >= NOW() - INTERVAL '1 day' * $2
+		 GROUP BY (start_time AT TIME ZONE $1)::date
+		 ORDER BY date`, tz, days)
 	if err != nil {
 		return nil, err
 	}
@@ -149,13 +156,17 @@ func (r *PostgresRepository) GetDailyTotals(days int) ([]DailyTotal, error) {
 	return totals, rows.Err()
 }
 
-func (r *PostgresRepository) GetDailyTotalsByMonth(month string) ([]DailyTotal, error) {
+func (r *PostgresRepository) GetDailyTotalsByMonth(month string, tz string) ([]DailyTotal, error) {
+	if tz == "" {
+		tz = "UTC"
+	}
+	// Convert UTC start_time to client timezone before extracting date and month
 	rows, err := r.DB.Query(
-		`SELECT start_time::date AS date, SUM(amount_ml) AS total_ml
+		`SELECT (start_time AT TIME ZONE $1)::date AS date, SUM(amount_ml) AS total_ml
 		 FROM feedings
-		 WHERE to_char(start_time, 'YYYY-MM') = $1
-		 GROUP BY start_time::date
-		 ORDER BY date`, month)
+		 WHERE to_char(start_time AT TIME ZONE $1, 'YYYY-MM') = $2
+		 GROUP BY (start_time AT TIME ZONE $1)::date
+		 ORDER BY date`, tz, month)
 	if err != nil {
 		return nil, err
 	}

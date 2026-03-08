@@ -73,7 +73,7 @@ input, select, textarea {
         display: flex;
         align-items: center;
         border-bottom: 1px solid #dee2e6;
-        font-size: 0.75rem;
+        font-size: 0.85rem;
     }
 
     .feeding-row td {
@@ -117,5 +117,11 @@ input, select, textarea {
     /* Full-width submit button */
     #submitBtn {
         width: 100%;
+    }
+
+    /* Ensure end time input is never clipped */
+    #endTime {
+        min-width: 0;
+        flex-shrink: 0;
     }
 }

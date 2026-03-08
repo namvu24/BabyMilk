@@ -61,7 +61,8 @@ func (s *Server) listFeedings(w http.ResponseWriter, r *http.Request) {
 	if filter == "" {
 		filter = r.URL.Query().Get("date")
 	}
-	feedings, err := s.Repo.GetFeedings(filter)
+	tz := r.URL.Query().Get("tz")
+	feedings, err := s.Repo.GetFeedings(filter, tz)
 	if err != nil {
 		respondError(w, http.StatusInternalServerError, err.Error())
 		return
@@ -129,8 +130,10 @@ func (s *Server) HandleDailyTotals(w http.ResponseWriter, r *http.Request) {
 	var totals []DailyTotal
 	var err error
 
+	tz := r.URL.Query().Get("tz")
+
 	if month := r.URL.Query().Get("month"); month != "" {
-		totals, err = s.Repo.GetDailyTotalsByMonth(month)
+		totals, err = s.Repo.GetDailyTotalsByMonth(month, tz)
 	} else {
 		days := 7
 		if d := r.URL.Query().Get("days"); d != "" {
@@ -138,7 +141,7 @@ func (s *Server) HandleDailyTotals(w http.ResponseWriter, r *http.Request) {
 				days = parsed
 			}
 		}
-		totals, err = s.Repo.GetDailyTotals(days)
+		totals, err = s.Repo.GetDailyTotals(days, tz)
 	}
 
 	if err != nil {
