@@ -1,5 +1,6 @@
 // ── Global state ──
 const API = '/api/feedings';
+const TZ = Intl.DateTimeFormat().resolvedOptions().timeZone; // e.g. "Asia/Ho_Chi_Minh"
 
 // ── Logger ──
 // Logs are shown on localhost / dev hostnames and suppressed in production
@@ -189,8 +190,8 @@ function changeMonth(delta) {
 // Fetch feedings from API (filtered by selected month) and render them
 async function loadFeedings() {
     const monthFilter = document.getElementById('monthFilter').value;
-    let url = API;
-    if (monthFilter) url += `?month=${monthFilter}`;
+    let url = API + `?tz=${encodeURIComponent(TZ)}`;
+    if (monthFilter) url += `&month=${monthFilter}`;
 
     try {
         const res = await fetch(url);
@@ -363,7 +364,8 @@ async function loadDailyTotals() {
     try {
         log.debug('Loading daily totals...');
         const month = document.getElementById('monthFilter').value;
-        const url = month ? `${API}/daily?month=${month}` : `${API}/daily?days=31`;
+        const tzParam = `tz=${encodeURIComponent(TZ)}`;
+        const url = month ? `${API}/daily?${tzParam}&month=${month}` : `${API}/daily?${tzParam}&days=31`;
         const res = await fetch(url);
         const totals = await res.json();
         renderChart(totals);
