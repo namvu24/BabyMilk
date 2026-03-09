@@ -17,7 +17,21 @@ func RunMigrations(db *sql.DB) {
 		)
 	`)
 	if err != nil {
-		log.Fatalf("Failed to run migrations: %v", err)
+		log.Fatalf("Failed to run feedings migration: %v", err)
 	}
+
+	_, err = db.Exec(`
+		CREATE TABLE IF NOT EXISTS sleeps (
+			id         SERIAL PRIMARY KEY,
+			start_time TIMESTAMPTZ NOT NULL,
+			end_time   TIMESTAMPTZ NOT NULL,
+			created_at TIMESTAMPTZ DEFAULT NOW(),
+			updated_at TIMESTAMPTZ DEFAULT NOW()
+		)
+	`)
+	if err != nil {
+		log.Fatalf("Failed to run sleeps migration: %v", err)
+	}
+
 	log.Println("Database migrations completed")
 }

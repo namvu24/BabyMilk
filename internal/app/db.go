@@ -182,3 +182,149 @@ func (r *PostgresRepository) GetDailyTotalsByMonth(month string, tz string) ([]D
 	}
 	return totals, rows.Err()
 }
+
+// ── Sleep repository methods ──
+
+func (r *PostgresRepository) GetSleeps(dateFilter string, tz string) ([]Sleep, error) {
+	if tz == "" {
+		tz = "UTC"
+	}
+	query := `SELECT id, start_time, end_time, created_at, updated_at FROM sleeps`
+	var args []interface{}
+	if len(dateFilter) == 7 {
+		query += ` WHERE to_char(start_time AT TIME ZONE $1, 'YYYY-MM') = $2`
+		args = append(args, tz, dateFilter)
+	} else if len(dateFilter) == 10 {
+		query += ` WHERE (start_time AT TIME ZONE $1)::date = $2`
+		args = append(args, tz, dateFilter)
+	}
+	query += ` ORDER BY start_time DESC`
+
+	rows, err := r.DB.Query(query, args...)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var sleeps []Sleep
+	for rows.Next() {
+		var s Sleep
+		if err := rows.Scan(&s.ID, &s.StartTime, &s.EndTime, &s.CreatedAt, &s.UpdatedAt); err != nil {
+			return nil, err
+		}
+		sleeps = append(sleeps, s)
+	}
+	return sleeps, rows.Err()
+}
+
+func (r *PostgresRepository) GetLastSleep() (*Sleep, error) {
+	var s Sleep
+	err := r.DB.QueryRow(
+		`SELECT id, start_time, end_time, created_at, updated_at
+		 FROM sleeps ORDER BY created_at DESC LIMIT 1`,
+	).Scan(&s.ID, &s.StartTime, &s.EndTime, &s.CreatedAt, &s.UpdatedAt)
+	if err != nil {
+		if err == sql.ErrNoRows {
+			return nil, nil
+		}
+		return nil, err
+	}
+	return &s, nil
+}
+
+func (r *PostgresRepository) CreateSleep(input SleepInput) (Sleep, error) {
+	start, _ := time.Parse(time.RFC3339, input.StartTime)
+	end, _ := time.Parse(time.RFC3339, input.EndTime)
+	var s Sleep
+	err := r.DB.QueryRow(
+		`INSERT INTO sleeps (start_time, end_time) VALUES ($1, $2)
+		 RETURNING id, start_time, end_time, created_at, updated_at`,
+		start, end,
+	).Scan(&s.ID, &s.StartTime, &s.EndTime, &s.CreatedAt, &s.UpdatedAt)
+	return s, err
+}
+
+func (r *PostgresRepository) UpdateSleep(id int, input SleepInput) (Sleep, error) {
+	start, _ := time.Parse(time.RFC3339, input.StartTime)
+	end, _ := time.Parse(time.RFC3339, input.EndTime)
+	var s Sleep
+	err := r.DB.QueryRow(
+		`UPDATE sleeps SET start_time=$1, end_time=$2, updated_at=NOW()
+		 WHERE id=$3
+		 RETURNING id, start_time, end_time, created_at, updated_at`,
+		start, end, id,
+	).Scan(&s.ID, &s.StartTime, &s.EndTime, &s.CreatedAt, &s.UpdatedAt)
+	return s, err
+}
+
+func (r *PostgresRepository) DeleteSleep(id int) error {
+	result, err := r.DB.Exec(`DELETE FROM sleeps WHERE id=$1`, id)
+	if err != nil {
+		return err
+	}
+	rows, err := result.RowsAffected()
+	if err != nil {
+		return err
+	}
+	if rows == 0 {
+		return fmt.Errorf("sleep not found")
+	}
+	return nil
+}
+
+func (r *PostgresRepository) GetSleepDailyTotals(days int, tz string) ([]DailySleepTotal, error) {
+	if days <= 0 {
+		days = 7
+	}
+	if tz == "" {
+		tz = "UTC"
+	}
+	rows, err := r.DB.Query(
+		`SELECT (start_time AT TIME ZONE $1)::date AS date,
+		        COALESCE(SUM(EXTRACT(EPOCH FROM (end_time - start_time)) / 60)::int, 0) AS total_minutes
+		 FROM sleeps
+		 WHERE start_time >= NOW() - INTERVAL '1 day' * $2
+		 GROUP BY (start_time AT TIME ZONE $1)::date
+		 ORDER BY date`, tz, days)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var totals []DailySleepTotal
+	for rows.Next() {
+		var t DailySleepTotal
+		if err := rows.Scan(&t.Date, &t.TotalMinutes); err != nil {
+			return nil, err
+		}
+		totals = append(totals, t)
+	}
+	return totals, rows.Err()
+}
+
+func (r *PostgresRepository) GetSleepDailyTotalsByMonth(month string, tz string) ([]DailySleepTotal, error) {
+	if tz == "" {
+		tz = "UTC"
+	}
+	rows, err := r.DB.Query(
+		`SELECT (start_time AT TIME ZONE $1)::date AS date,
+		        COALESCE(SUM(EXTRACT(EPOCH FROM (end_time - start_time)) / 60)::int, 0) AS total_minutes
+		 FROM sleeps
+		 WHERE to_char(start_time AT TIME ZONE $1, 'YYYY-MM') = $2
+		 GROUP BY (start_time AT TIME ZONE $1)::date
+		 ORDER BY date`, tz, month)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var totals []DailySleepTotal
+	for rows.Next() {
+		var t DailySleepTotal
+		if err := rows.Scan(&t.Date, &t.TotalMinutes); err != nil {
+			return nil, err
+		}
+		totals = append(totals, t)
+	}
+	return totals, rows.Err()
+}

@@ -94,3 +94,67 @@ func TestFeedingInput_Validate_EndEqualsStart(t *testing.T) {
 		t.Errorf("expected end_time equal to start_time to be valid, got %v", err)
 	}
 }
+
+// ═══════════════════════════════════════════════════════════════════════════
+// ── SleepInput validation tests ──
+// ═══════════════════════════════════════════════════════════════════════════
+
+func TestSleepInput_Validate_Valid(t *testing.T) {
+	input := SleepInput{
+		StartTime: "2025-01-15T22:00:00Z",
+		EndTime:   "2025-01-16T06:00:00Z",
+	}
+	if err := input.Validate(); err != nil {
+		t.Errorf("expected no error, got %v", err)
+	}
+}
+
+func TestSleepInput_Validate_EndEqualsStart(t *testing.T) {
+	input := SleepInput{
+		StartTime: "2025-01-15T22:00:00Z",
+		EndTime:   "2025-01-15T22:00:00Z",
+	}
+	if err := input.Validate(); err != nil {
+		t.Errorf("expected end_time equal to start_time to be valid, got %v", err)
+	}
+}
+
+func TestSleepInput_Validate_EndBeforeStart(t *testing.T) {
+	input := SleepInput{
+		StartTime: "2025-01-16T06:00:00Z",
+		EndTime:   "2025-01-15T22:00:00Z",
+	}
+	if err := input.Validate(); err == nil {
+		t.Error("expected error when end_time is before start_time")
+	}
+}
+
+func TestSleepInput_Validate_InvalidStartTime(t *testing.T) {
+	input := SleepInput{
+		StartTime: "not-a-date",
+		EndTime:   "2025-01-16T06:00:00Z",
+	}
+	if err := input.Validate(); err == nil {
+		t.Error("expected error for invalid start_time")
+	}
+}
+
+func TestSleepInput_Validate_InvalidEndTime(t *testing.T) {
+	input := SleepInput{
+		StartTime: "2025-01-15T22:00:00Z",
+		EndTime:   "not-a-date",
+	}
+	if err := input.Validate(); err == nil {
+		t.Error("expected error for invalid end_time")
+	}
+}
+
+func TestSleepInput_Validate_EmptyTimes(t *testing.T) {
+	input := SleepInput{
+		StartTime: "",
+		EndTime:   "",
+	}
+	if err := input.Validate(); err == nil {
+		t.Error("expected error for empty times")
+	}
+}
