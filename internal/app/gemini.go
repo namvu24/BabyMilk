@@ -129,8 +129,9 @@ Important guidelines:
 			{Parts: []geminiPart{{Text: prompt}}},
 		},
 		GenerationConfig: map[string]interface{}{
-			"temperature":     0.7,
-			"maxOutputTokens": 4096,
+			"temperature":      0.7,
+			"maxOutputTokens":  4096,
+			"responseMimeType": "application/json",
 		},
 	}
 
@@ -143,49 +144,65 @@ Important guidelines:
 
 	log.Printf("Calling Gemini API for week %d (model: %s)", weekNumber, g.Model)
 
-	body, err := g.callWithRetry(url, jsonBody)
-	if err != nil {
-		return "", err
-	}
+	// Retry loop for invalid JSON content (separate from HTTP-level retries in callWithRetry)
+	const maxJSONRetries = 2
+	var lastJSONErr error
 
-	var geminiResp geminiResponse
-	if err := json.Unmarshal(body, &geminiResp); err != nil {
-		return "", fmt.Errorf("failed to parse Gemini response: %w", err)
-	}
-
-	if geminiResp.Error != nil {
-		return "", fmt.Errorf("Gemini API error: %s", geminiResp.Error.Message)
-	}
-
-	if len(geminiResp.Candidates) == 0 || len(geminiResp.Candidates[0].Content.Parts) == 0 {
-		return "", fmt.Errorf("Gemini returned empty response")
-	}
-
-	text := geminiResp.Candidates[0].Content.Parts[0].Text
-
-	// Strip markdown code fences if present
-	text = strings.TrimSpace(text)
-	if strings.HasPrefix(text, "```json") {
-		text = strings.TrimPrefix(text, "```json")
-		text = strings.TrimSuffix(text, "```")
-		text = strings.TrimSpace(text)
-	} else if strings.HasPrefix(text, "```") {
-		text = strings.TrimPrefix(text, "```")
-		text = strings.TrimSuffix(text, "```")
-		text = strings.TrimSpace(text)
-	}
-
-	// Validate JSON
-	var js json.RawMessage
-	if err := json.Unmarshal([]byte(text), &js); err != nil {
-		n := len(text)
-		if n > 200 {
-			n = 200
+	for jsonAttempt := 0; jsonAttempt <= maxJSONRetries; jsonAttempt++ {
+		if jsonAttempt > 0 {
+			log.Printf("Retrying Gemini call for week %d due to invalid JSON (attempt %d/%d): %v", weekNumber, jsonAttempt, maxJSONRetries, lastJSONErr)
+			time.Sleep(time.Duration(jsonAttempt) * time.Second)
 		}
-		return "", fmt.Errorf("Gemini returned invalid JSON: %w\nRaw: %s", err, text[:n])
+
+		body, err := g.callWithRetry(url, jsonBody)
+		if err != nil {
+			return "", err
+		}
+
+		var geminiResp geminiResponse
+		if err := json.Unmarshal(body, &geminiResp); err != nil {
+			lastJSONErr = fmt.Errorf("failed to parse Gemini response: %w", err)
+			continue
+		}
+
+		if geminiResp.Error != nil {
+			return "", fmt.Errorf("Gemini API error: %s", geminiResp.Error.Message)
+		}
+
+		if len(geminiResp.Candidates) == 0 || len(geminiResp.Candidates[0].Content.Parts) == 0 {
+			lastJSONErr = fmt.Errorf("Gemini returned empty response")
+			continue
+		}
+
+		text := geminiResp.Candidates[0].Content.Parts[0].Text
+
+		// Strip markdown code fences if present
+		text = strings.TrimSpace(text)
+		if strings.HasPrefix(text, "```json") {
+			text = strings.TrimPrefix(text, "```json")
+			text = strings.TrimSuffix(text, "```")
+			text = strings.TrimSpace(text)
+		} else if strings.HasPrefix(text, "```") {
+			text = strings.TrimPrefix(text, "```")
+			text = strings.TrimSuffix(text, "```")
+			text = strings.TrimSpace(text)
+		}
+
+		// Validate JSON
+		var js json.RawMessage
+		if err := json.Unmarshal([]byte(text), &js); err != nil {
+			n := len(text)
+			if n > 200 {
+				n = 200
+			}
+			lastJSONErr = fmt.Errorf("Gemini returned invalid JSON: %w\nRaw: %s", err, text[:n])
+			continue
+		}
+
+		return text, nil
 	}
 
-	return text, nil
+	return "", fmt.Errorf("Gemini returned invalid JSON after %d attempts: %w", maxJSONRetries+1, lastJSONErr)
 }
 
 // callWithRetry performs an HTTP POST with exponential backoff retry for transient errors.
