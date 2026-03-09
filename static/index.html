@@ -11,7 +11,24 @@
 <body>
     <button id="darkModeBtn" class="btn btn-outline-secondary btn-sm rounded-circle p-0 position-fixed" style="width:32px;height:32px;font-size:14px;line-height:32px;top:12px;right:12px;z-index:1050" onclick="toggleDarkMode()" title="Toggle dark mode">🌙</button>
     <div class="container py-4">
-        <h1 class="mb-4">🍼 BabyMilk</h1>
+        <h1 class="mb-3">🍼 BabyMilk</h1>
+
+        <!-- Tab navigation -->
+        <ul class="nav nav-tabs mb-4" role="tablist">
+            <li class="nav-item" role="presentation">
+                <button class="nav-link active" id="milk-tab" data-bs-toggle="tab" data-bs-target="#milkPane" type="button" role="tab" aria-selected="true">🍼 Feeding</button>
+            </li>
+            <li class="nav-item" role="presentation">
+                <button class="nav-link" id="sleep-tab" data-bs-toggle="tab" data-bs-target="#sleepPane" type="button" role="tab" aria-selected="false">😴 Sleep</button>
+            </li>
+            <li class="nav-item" role="presentation">
+                <button class="nav-link" id="event-tab" data-bs-toggle="tab" data-bs-target="#eventPane" type="button" role="tab" aria-selected="false">📅 Event</button>
+            </li>
+        </ul>
+
+        <div class="tab-content">
+            <!-- ═══════════ MILK TAB ═══════════ -->
+            <div class="tab-pane fade show active" id="milkPane" role="tabpanel">
 
         <!-- Quick Start/Stop Button -->
         <div class="card mb-4 border-0 bg-transparent shadow-none">
@@ -84,10 +101,103 @@
                 <div id="feedingsByDay"></div>
             </div>
         </div>
+
+            </div><!-- /milkPane -->
+
+            <!-- ═══════════ SLEEP TAB ═══════════ -->
+            <div class="tab-pane fade" id="sleepPane" role="tabpanel">
+
+        <!-- Quick Start/Stop Sleep Button -->
+        <div class="card mb-4 border-0 bg-transparent shadow-none">
+            <div class="d-grid">
+                <button id="sleepStartStopBtn" class="btn btn-sleep btn-lg py-3" onclick="toggleSleepTimer()">
+                    😴 Start Sleep
+                </button>
+            </div>
+            <div id="sleepTimerDisplay" class="text-center mt-2 fs-4 fw-bold d-none" style="color:#c7550a"></div>
+        </div>
+
+        <!-- Add/Edit Sleep Form -->
+        <div class="card mb-4">
+            <div class="card-body">
+                <h5 class="card-title" id="sleepFormTitle">Add Sleep</h5>
+                <form id="sleepForm">
+                    <input type="hidden" id="sleepEditId">
+                    <div class="row g-3">
+                        <div class="col-12 col-md-4">
+                            <label for="sleepDate" class="form-label">Date</label>
+                            <input type="date" class="form-control" id="sleepDate" required>
+                        </div>
+                        <div class="col-6 col-md-4">
+                            <label for="sleepStartTime" class="form-label">Start</label>
+                            <input type="time" class="form-control" id="sleepStartTime" required>
+                        </div>
+                        <div class="col-6 col-md-4">
+                            <label for="sleepEndTime" class="form-label">End</label>
+                            <input type="time" class="form-control" id="sleepEndTime" required>
+                        </div>
+                    </div>
+                    <div class="mt-3 d-flex gap-2">
+                        <button type="submit" class="btn btn-sleep flex-grow-1 flex-md-grow-0" id="sleepSubmitBtn">Add</button>
+                        <button type="button" class="btn btn-secondary d-none flex-grow-1 flex-md-grow-0" id="sleepCancelBtn" onclick="cancelSleepEdit()">Cancel</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+
+        <!-- Daily Sleep Chart -->
+        <div class="card mb-4">
+            <div class="card-body">
+                <h5 class="card-title">Daily Sleep Totals</h5>
+                <div id="sleepChartWrapper" style="position:relative; height:200px;">
+                    <canvas id="sleepChart"></canvas>
+                </div>
+            </div>
+        </div>
+
+        <!-- Sleeps Table -->
+        <div class="card">
+            <div class="card-body">
+                <div class="d-flex justify-content-between align-items-center mb-3">
+                    <h5 class="card-title mb-0">Sleep Sessions</h5>
+                    <div class="d-flex align-items-center gap-1">
+                        <button class="btn btn-outline-secondary btn-sm px-2" onclick="changeSleepMonth(-1)" title="Previous month">◀</button>
+                        <input type="month" class="form-control form-control-sm w-auto" id="sleepMonthFilter" onchange="loadSleeps(); loadSleepDailyTotals()">
+                        <button class="btn btn-outline-secondary btn-sm px-2" onclick="changeSleepMonth(1)" title="Next month">▶</button>
+                    </div>
+                </div>
+                <div id="sleepsByDay"></div>
+            </div>
+        </div>
+
+            </div><!-- /sleepPane -->
+
+            <!-- ═══════════ EVENT TAB ═══════════ -->
+            <div class="tab-pane fade" id="eventPane" role="tabpanel">
+
+        <!-- Date picker with navigation -->
+        <div class="card mb-4">
+            <div class="card-body">
+                <div class="d-flex justify-content-between align-items-center">
+                    <h5 class="card-title mb-0">Events Timeline</h5>
+                    <div class="d-flex align-items-center gap-1">
+                        <button class="btn btn-outline-secondary btn-sm px-2" onclick="changeEventDate(-1)" title="Previous day">◀</button>
+                        <input type="date" class="form-control form-control-sm w-auto" id="eventDateFilter" onchange="loadEvents()">
+                        <button class="btn btn-outline-secondary btn-sm px-2" onclick="changeEventDate(1)" title="Next day">▶</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Events list -->
+        <div id="eventsList"></div>
+
+            </div><!-- /eventPane -->
+        </div><!-- /tab-content -->
     </div>
 
     <footer class="text-center text-muted py-3" style="font-size:0.8rem">
-        <a href="https://github.com/namvu24/BabyMilk" target="_blank" rel="noopener" class="text-muted text-decoration-none"><svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" fill="currentColor" viewBox="0 0 16 16" style="vertical-align:-2px"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82a7.64 7.64 0 0 1 4 0c1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.01 8.01 0 0 0 16 8c0-4.42-3.58-8-8-8z"/></svg> BabyMilk v1.3.0</a>
+        <a href="https://github.com/namvu24/BabyMilk" target="_blank" rel="noopener" class="text-muted text-decoration-none"><svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" fill="currentColor" viewBox="0 0 16 16" style="vertical-align:-2px"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82a7.64 7.64 0 0 1 4 0c1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.01 8.01 0 0 0 16 8c0-4.42-3.58-8-8-8z"/></svg> BabyMilk v2.0.0</a>
     </footer>
 
     <!-- Toast notification -->

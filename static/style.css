@@ -31,6 +31,22 @@ h1 {
     box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
 }
 
+/* Sleep theme color */
+.btn-sleep {
+    background-color: #c7550a;
+    border-color: #c7550a;
+    color: #fff;
+}
+.btn-sleep:hover, .btn-sleep:focus, .btn-sleep:active {
+    background-color: #a94709;
+    border-color: #a94709;
+    color: #fff;
+}
+.bg-sleep {
+    background-color: #c7550a !important;
+    color: #fff !important;
+}
+
 /* Larger touch targets */
 .btn {
     min-height: 44px;

@@ -21,11 +21,17 @@ func main() {
 
 	mux := http.NewServeMux()
 
-	// API routes
+	// API routes — Feedings
 	mux.HandleFunc("/api/feedings/daily", srv.HandleDailyTotals)
 	mux.HandleFunc("/api/feedings/last", srv.HandleLastFeeding)
 	mux.HandleFunc("/api/feedings/", srv.HandleFeedingByID)
 	mux.HandleFunc("/api/feedings", srv.HandleFeedings)
+
+	// API routes — Sleeps
+	mux.HandleFunc("/api/sleeps/daily", srv.HandleSleepDailyTotals)
+	mux.HandleFunc("/api/sleeps/last", srv.HandleLastSleep)
+	mux.HandleFunc("/api/sleeps/", srv.HandleSleepByID)
+	mux.HandleFunc("/api/sleeps", srv.HandleSleeps)
 
 	port := os.Getenv("PORT")
 	if port == "" {

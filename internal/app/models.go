@@ -42,3 +42,38 @@ func (f *FeedingInput) Validate() error {
 	}
 	return nil
 }
+
+// ── Sleep models ──
+
+type Sleep struct {
+	ID        int       `json:"id"`
+	StartTime time.Time `json:"start_time"`
+	EndTime   time.Time `json:"end_time"`
+	CreatedAt time.Time `json:"created_at"`
+	UpdatedAt time.Time `json:"updated_at"`
+}
+
+type SleepInput struct {
+	StartTime string `json:"start_time"`
+	EndTime   string `json:"end_time"`
+}
+
+type DailySleepTotal struct {
+	Date         string `json:"date"`
+	TotalMinutes int    `json:"total_minutes"`
+}
+
+func (s *SleepInput) Validate() error {
+	start, err := time.Parse(time.RFC3339, s.StartTime)
+	if err != nil {
+		return fmt.Errorf("invalid start_time format, use RFC3339")
+	}
+	end, err := time.Parse(time.RFC3339, s.EndTime)
+	if err != nil {
+		return fmt.Errorf("invalid end_time format, use RFC3339")
+	}
+	if end.Before(start) {
+		return fmt.Errorf("end_time must not be before start_time")
+	}
+	return nil
+}

@@ -45,6 +45,7 @@ func TestMain(m *testing.M) {
 	code := m.Run()
 
 	testDB.Exec("DROP TABLE IF EXISTS feedings")
+	testDB.Exec("DROP TABLE IF EXISTS sleeps")
 	testDB.Close()
 	os.Exit(code)
 }
@@ -194,5 +195,154 @@ func TestGetDailyTotals_Integration(t *testing.T) {
 	}
 	if !found {
 		t.Errorf("expected daily total of 300ml, got %v", totals)
+	}
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// ── Sleep integration tests ──
+// ═══════════════════════════════════════════════════════════════════════════
+
+func cleanSleepsTable(t *testing.T) {
+	t.Helper()
+	_, err := testDB.Exec("DELETE FROM sleeps")
+	if err != nil {
+		t.Fatalf("Failed to clean sleeps table: %v", err)
+	}
+}
+
+func seedSleep(t *testing.T, startTime, endTime string) Sleep {
+	t.Helper()
+	input := SleepInput{
+		StartTime: startTime,
+		EndTime:   endTime,
+	}
+	s, err := testRepo.CreateSleep(input)
+	if err != nil {
+		t.Fatalf("Failed to seed sleep: %v", err)
+	}
+	return s
+}
+
+func TestCreateSleep_Integration(t *testing.T) {
+	cleanSleepsTable(t)
+	input := SleepInput{
+		StartTime: "2025-01-15T22:00:00Z",
+		EndTime:   "2025-01-16T06:00:00Z",
+	}
+	s, err := testRepo.CreateSleep(input)
+	if err != nil {
+		t.Fatalf("CreateSleep failed: %v", err)
+	}
+	if s.ID == 0 {
+		t.Error("expected non-zero ID")
+	}
+}
+
+func TestGetSleeps_Integration(t *testing.T) {
+	cleanSleepsTable(t)
+	seedSleep(t, "2025-01-15T22:00:00Z", "2025-01-16T06:00:00Z")
+	seedSleep(t, "2025-01-16T13:00:00Z", "2025-01-16T14:30:00Z")
+
+	sleeps, err := testRepo.GetSleeps("", "")
+	if err != nil {
+		t.Fatalf("GetSleeps failed: %v", err)
+	}
+	if len(sleeps) != 2 {
+		t.Errorf("expected 2 sleeps, got %d", len(sleeps))
+	}
+}
+
+func TestUpdateSleep_Integration(t *testing.T) {
+	cleanSleepsTable(t)
+	created := seedSleep(t, "2025-01-15T22:00:00Z", "2025-01-16T06:00:00Z")
+
+	input := SleepInput{
+		StartTime: "2025-01-15T21:00:00Z",
+		EndTime:   "2025-01-16T07:00:00Z",
+	}
+	updated, err := testRepo.UpdateSleep(created.ID, input)
+	if err != nil {
+		t.Fatalf("UpdateSleep failed: %v", err)
+	}
+	if updated.ID != created.ID {
+		t.Errorf("expected same ID %d, got %d", created.ID, updated.ID)
+	}
+}
+
+func TestDeleteSleep_Integration(t *testing.T) {
+	cleanSleepsTable(t)
+	created := seedSleep(t, "2025-01-15T22:00:00Z", "2025-01-16T06:00:00Z")
+
+	err := testRepo.DeleteSleep(created.ID)
+	if err != nil {
+		t.Fatalf("DeleteSleep failed: %v", err)
+	}
+
+	sleeps, _ := testRepo.GetSleeps("", "")
+	if len(sleeps) != 0 {
+		t.Errorf("expected 0 sleeps after delete, got %d", len(sleeps))
+	}
+}
+
+func TestDeleteSleep_NotFound_Integration(t *testing.T) {
+	cleanSleepsTable(t)
+	err := testRepo.DeleteSleep(99999)
+	if err == nil {
+		t.Error("expected error for non-existent sleep")
+	}
+}
+
+func TestGetSleepDailyTotals_Integration(t *testing.T) {
+	cleanSleepsTable(t)
+
+	now := time.Now()
+	today := now.Format("2006-01-02")
+	// Two naps today: 1h + 1.5h = 150 minutes
+	seedSleep(t,
+		fmt.Sprintf("%sT10:00:00Z", today),
+		fmt.Sprintf("%sT11:00:00Z", today))
+	seedSleep(t,
+		fmt.Sprintf("%sT14:00:00Z", today),
+		fmt.Sprintf("%sT15:30:00Z", today))
+
+	totals, err := testRepo.GetSleepDailyTotals(7, "")
+	if err != nil {
+		t.Fatalf("GetSleepDailyTotals failed: %v", err)
+	}
+	if len(totals) == 0 {
+		t.Fatal("expected at least 1 daily sleep total")
+	}
+
+	found := false
+	for _, total := range totals {
+		if total.TotalMinutes == 150 {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Errorf("expected daily sleep total of 150 minutes, got %v", totals)
+	}
+}
+
+func TestGetLastSleep_Integration(t *testing.T) {
+	cleanSleepsTable(t)
+
+	// No sleeps yet
+	last, err := testRepo.GetLastSleep()
+	if err != nil {
+		t.Fatalf("GetLastSleep failed: %v", err)
+	}
+	if last != nil {
+		t.Error("expected nil when no sleeps exist")
+	}
+
+	seedSleep(t, "2025-01-15T22:00:00Z", "2025-01-16T06:00:00Z")
+	last, err = testRepo.GetLastSleep()
+	if err != nil {
+		t.Fatalf("GetLastSleep failed: %v", err)
+	}
+	if last == nil {
+		t.Error("expected non-nil sleep")
 	}
 }
