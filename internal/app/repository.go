@@ -19,4 +19,10 @@ type Repository interface {
 	DeleteSleep(id int) error
 	GetSleepDailyTotals(days int, tz string) ([]DailySleepTotal, error)
 	GetSleepDailyTotalsByMonth(month string, tz string) ([]DailySleepTotal, error)
+
+	// Baby profile & development methods
+	GetBabyProfile() (*BabyProfile, error)
+	SaveBabyProfile(dob string) (*BabyProfile, error)
+	GetDevelopmentCache(weekNumber int) (*DevelopmentContent, error)
+	SaveDevelopmentCache(weekNumber int, content string) error
 }

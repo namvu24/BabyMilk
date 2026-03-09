@@ -24,6 +24,9 @@
             <li class="nav-item" role="presentation">
                 <button class="nav-link" id="event-tab" data-bs-toggle="tab" data-bs-target="#eventPane" type="button" role="tab" aria-selected="false">📅 Event</button>
             </li>
+            <li class="nav-item" role="presentation">
+                <button class="nav-link" id="dev-tab" data-bs-toggle="tab" data-bs-target="#developmentPane" type="button" role="tab" aria-selected="false">🧒 Development</button>
+            </li>
         </ul>
 
         <div class="tab-content">
@@ -193,11 +196,111 @@
         <div id="eventsList"></div>
 
             </div><!-- /eventPane -->
+
+            <!-- ═══════════ DEVELOPMENT TAB ═══════════ -->
+            <div class="tab-pane fade" id="developmentPane" role="tabpanel">
+
+        <!-- DOB Setup (shown when no profile exists) -->
+        <div id="dobSetup" class="card mb-4">
+            <div class="card-body text-center">
+                <h5 class="card-title">👶 Set Baby's Date of Birth</h5>
+                <p class="text-muted">Enter your baby's date of birth to get personalized development information powered by AI.</p>
+                <div class="row justify-content-center">
+                    <div class="col-auto">
+                        <div class="input-group">
+                            <input type="date" class="form-control" id="babyDob" required>
+                            <button class="btn btn-dev" onclick="saveBabyProfile()">Save</button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Baby age info bar (shown when profile exists) -->
+        <div id="babyInfoBar" class="card mb-4 d-none">
+            <div class="card-body">
+                <div class="d-flex justify-content-between align-items-center flex-wrap gap-2">
+                    <div>
+                        <span class="fs-5 fw-bold" id="babyAgeDisplay"></span>
+                        <br><small class="text-muted" id="babyDobDisplay"></small>
+                    </div>
+                    <div class="d-flex align-items-center gap-1">
+                        <button class="btn btn-outline-secondary btn-sm px-2" onclick="switchWeek(-1)" title="Previous week">◀</button>
+                        <span class="badge bg-dev fs-6 px-3 py-2" id="weekBadge">Week 0</span>
+                        <button class="btn btn-outline-secondary btn-sm px-2" onclick="switchWeek(1)" title="Next week">▶</button>
+                    </div>
+                    <button class="btn btn-outline-secondary btn-sm" onclick="editBabyDob()" title="Change DOB">✏️ Edit DOB</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Loading spinner -->
+        <div id="devLoading" class="text-center py-5 d-none">
+            <div class="spinner-border text-secondary" role="status" style="width:3rem;height:3rem"></div>
+            <p class="text-muted mt-3">Generating development content with AI...<br><small>This may take a moment for the first load</small></p>
+        </div>
+
+        <!-- Error state -->
+        <div id="devError" class="alert alert-warning d-none" role="alert">
+            <strong>⚠️ Unable to load content</strong>
+            <p id="devErrorMsg" class="mb-0 mt-1"></p>
+        </div>
+
+        <!-- Development content (4 sections) -->
+        <div id="devContent" class="d-none">
+
+            <!-- Behaviors -->
+            <div class="card mb-3 dev-card">
+                <div class="card-header bg-dev text-white d-flex justify-content-between align-items-center" role="button" data-bs-toggle="collapse" data-bs-target="#behaviorCollapse">
+                    <h6 class="mb-0">🧠 Expected Behaviors</h6>
+                    <span class="collapse-icon">▼</span>
+                </div>
+                <div id="behaviorCollapse" class="collapse show">
+                    <div class="card-body" id="behaviorsContent"></div>
+                </div>
+            </div>
+
+            <!-- Milestones -->
+            <div class="card mb-3 dev-card">
+                <div class="card-header bg-dev text-white d-flex justify-content-between align-items-center" role="button" data-bs-toggle="collapse" data-bs-target="#milestoneCollapse">
+                    <h6 class="mb-0">🏆 Milestones & Development</h6>
+                    <span class="collapse-icon">▼</span>
+                </div>
+                <div id="milestoneCollapse" class="collapse show">
+                    <div class="card-body" id="milestonesContent"></div>
+                </div>
+            </div>
+
+            <!-- Wonder Weeks -->
+            <div class="card mb-3 dev-card">
+                <div class="card-header bg-dev text-white d-flex justify-content-between align-items-center" role="button" data-bs-toggle="collapse" data-bs-target="#wonderCollapse">
+                    <h6 class="mb-0">🌟 Wonder Weeks</h6>
+                    <span class="collapse-icon">▼</span>
+                </div>
+                <div id="wonderCollapse" class="collapse show">
+                    <div class="card-body" id="wonderWeekContent"></div>
+                </div>
+            </div>
+
+            <!-- Exercises -->
+            <div class="card mb-3 dev-card">
+                <div class="card-header bg-dev text-white d-flex justify-content-between align-items-center" role="button" data-bs-toggle="collapse" data-bs-target="#exerciseCollapse">
+                    <h6 class="mb-0">🤸 Baby Exercises</h6>
+                    <span class="collapse-icon">▼</span>
+                </div>
+                <div id="exerciseCollapse" class="collapse show">
+                    <div class="card-body" id="exercisesContent"></div>
+                </div>
+            </div>
+
+        </div>
+
+            </div><!-- /developmentPane -->
         </div><!-- /tab-content -->
     </div>
 
     <footer class="text-center text-muted py-3" style="font-size:0.8rem">
-        <a href="https://github.com/namvu24/BabyMilk" target="_blank" rel="noopener" class="text-muted text-decoration-none"><svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" fill="currentColor" viewBox="0 0 16 16" style="vertical-align:-2px"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82a7.64 7.64 0 0 1 4 0c1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.01 8.01 0 0 0 16 8c0-4.42-3.58-8-8-8z"/></svg> BabyMilk v2.0.0</a>
+        <a href="https://github.com/namvu24/BabyMilk" target="_blank" rel="noopener" class="text-muted text-decoration-none"><svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" fill="currentColor" viewBox="0 0 16 16" style="vertical-align:-2px"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82a7.64 7.64 0 0 1 4 0c1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.01 8.01 0 0 0 16 8c0-4.42-3.58-8-8-8z"/></svg> BabyMilk v2.1.0</a>
     </footer>
 
     <!-- Toast notification -->

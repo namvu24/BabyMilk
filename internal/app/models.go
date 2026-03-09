@@ -77,3 +77,35 @@ func (s *SleepInput) Validate() error {
 	}
 	return nil
 }
+
+// ── Baby profile & development models ──
+
+type BabyProfile struct {
+	ID          int       `json:"id"`
+	DateOfBirth time.Time `json:"date_of_birth"`
+	CreatedAt   time.Time `json:"created_at"`
+	UpdatedAt   time.Time `json:"updated_at"`
+}
+
+type BabyProfileInput struct {
+	DateOfBirth string `json:"date_of_birth"`
+}
+
+func (b *BabyProfileInput) Validate() error {
+	if b.DateOfBirth == "" {
+		return fmt.Errorf("date_of_birth is required")
+	}
+	_, err := time.Parse("2006-01-02", b.DateOfBirth)
+	if err != nil {
+		return fmt.Errorf("invalid date_of_birth format, use YYYY-MM-DD")
+	}
+	return nil
+}
+
+type DevelopmentContent struct {
+	ID         int       `json:"id"`
+	WeekNumber int       `json:"week_number"`
+	Content    string    `json:"content"`
+	CreatedAt  time.Time `json:"created_at"`
+	UpdatedAt  time.Time `json:"updated_at"`
+}

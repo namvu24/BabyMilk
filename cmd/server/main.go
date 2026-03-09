@@ -17,7 +17,19 @@ func main() {
 	app.RunMigrations(db)
 
 	repo := app.NewPostgresRepository(db)
-	srv := app.NewServer(repo)
+
+	// Initialize Gemini client (optional — development tab degrades gracefully without it)
+	var gemini *app.GeminiClient
+	geminiKey := os.Getenv("GEMINI_API_KEY")
+	if geminiKey != "" {
+		geminiModel := os.Getenv("GEMINI_MODEL")
+		gemini = app.NewGeminiClient(geminiKey, geminiModel)
+		log.Printf("Gemini AI configured (model: %s)", gemini.Model)
+	} else {
+		log.Println("Warning: GEMINI_API_KEY not set — Development tab AI features disabled")
+	}
+
+	srv := app.NewServer(repo, gemini)
 
 	mux := http.NewServeMux()
 
@@ -32,6 +44,10 @@ func main() {
 	mux.HandleFunc("/api/sleeps/last", srv.HandleLastSleep)
 	mux.HandleFunc("/api/sleeps/", srv.HandleSleepByID)
 	mux.HandleFunc("/api/sleeps", srv.HandleSleeps)
+
+	// API routes — Baby profile & Development
+	mux.HandleFunc("/api/baby", srv.HandleBabyProfile)
+	mux.HandleFunc("/api/development", srv.HandleDevelopment)
 
 	port := os.Getenv("PORT")
 	if port == "" {

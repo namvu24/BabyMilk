@@ -2,19 +2,27 @@ package app
 
 import (
 	"encoding/json"
+	"fmt"
+	"log"
 	"net/http"
 	"strconv"
 	"strings"
+	"time"
 )
 
 // Server holds dependencies for HTTP handlers.
 type Server struct {
-	Repo Repository
+	Repo   Repository
+	Gemini *GeminiClient
 }
 
-// NewServer creates a new Server with the given repository.
-func NewServer(repo Repository) *Server {
-	return &Server{Repo: repo}
+// NewServer creates a new Server with the given repository and optional Gemini client.
+func NewServer(repo Repository, gemini ...*GeminiClient) *Server {
+	s := &Server{Repo: repo}
+	if len(gemini) > 0 {
+		s.Gemini = gemini[0]
+	}
+	return s
 }
 
 func respondJSON(w http.ResponseWriter, status int, data interface{}) {
@@ -315,4 +323,128 @@ func (s *Server) HandleLastSleep(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	respondJSON(w, http.StatusOK, sleep)
+}
+
+// ── Baby profile & development handlers ──
+
+func (s *Server) HandleBabyProfile(w http.ResponseWriter, r *http.Request) {
+	switch r.Method {
+	case http.MethodGet:
+		profile, err := s.Repo.GetBabyProfile()
+		if err != nil {
+			respondError(w, http.StatusInternalServerError, err.Error())
+			return
+		}
+		if profile == nil {
+			respondJSON(w, http.StatusOK, nil)
+			return
+		}
+		respondJSON(w, http.StatusOK, profile)
+	case http.MethodPut:
+		var input BabyProfileInput
+		if err := json.NewDecoder(r.Body).Decode(&input); err != nil {
+			respondError(w, http.StatusBadRequest, "invalid JSON")
+			return
+		}
+		if err := input.Validate(); err != nil {
+			respondError(w, http.StatusBadRequest, err.Error())
+			return
+		}
+		profile, err := s.Repo.SaveBabyProfile(input.DateOfBirth)
+		if err != nil {
+			respondError(w, http.StatusInternalServerError, err.Error())
+			return
+		}
+		respondJSON(w, http.StatusOK, profile)
+	default:
+		respondError(w, http.StatusMethodNotAllowed, "method not allowed")
+	}
+}
+
+func (s *Server) HandleDevelopment(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		respondError(w, http.StatusMethodNotAllowed, "method not allowed")
+		return
+	}
+
+	// Get baby profile
+	profile, err := s.Repo.GetBabyProfile()
+	if err != nil {
+		respondError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	if profile == nil {
+		respondError(w, http.StatusBadRequest, "please set baby date of birth first")
+		return
+	}
+
+	// Calculate current week
+	now := time.Now()
+	ageInDays := int(now.Sub(profile.DateOfBirth).Hours() / 24)
+	currentWeek := ageInDays / 7
+	if currentWeek < 0 {
+		currentWeek = 0
+	}
+
+	// Optional week query param to get a specific week
+	if w_param := r.URL.Query().Get("week"); w_param != "" {
+		if parsed, err := strconv.Atoi(w_param); err == nil && parsed >= 0 {
+			// Return single week
+			content, err := s.getOrGenerateWeek(parsed, profile.DateOfBirth)
+			if err != nil {
+				respondError(w, http.StatusInternalServerError, err.Error())
+				return
+			}
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusOK)
+			fmt.Fprintf(w, `{"current_week":%d,"weeks":[%s]}`, currentWeek, content)
+			return
+		}
+	}
+
+	// Load current week + 3 weeks ahead
+	var weeks []string
+	for i := 0; i < 4; i++ {
+		wk := currentWeek + i
+		content, err := s.getOrGenerateWeek(wk, profile.DateOfBirth)
+		if err != nil {
+			log.Printf("Failed to generate content for week %d: %v", wk, err)
+			// Return error placeholder
+			content = fmt.Sprintf(`{"week_number":%d,"error":"Failed to generate content: %s"}`, wk, strings.ReplaceAll(err.Error(), `"`, `\"`))
+		}
+		weeks = append(weeks, content)
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
+	fmt.Fprintf(w, `{"current_week":%d,"weeks":[%s]}`, currentWeek, strings.Join(weeks, ","))
+}
+
+// getOrGenerateWeek returns cached content or generates it via Gemini.
+func (s *Server) getOrGenerateWeek(weekNumber int, dob time.Time) (string, error) {
+	// Check cache first
+	cached, err := s.Repo.GetDevelopmentCache(weekNumber)
+	if err != nil {
+		return "", err
+	}
+	if cached != nil {
+		return cached.Content, nil
+	}
+
+	// Generate via Gemini
+	if s.Gemini == nil {
+		return "", fmt.Errorf("AI service is not configured (missing GEMINI_API_KEY)")
+	}
+
+	content, err := s.Gemini.GenerateDevelopmentContent(weekNumber, dob)
+	if err != nil {
+		return "", err
+	}
+
+	// Cache for future use
+	if saveErr := s.Repo.SaveDevelopmentCache(weekNumber, content); saveErr != nil {
+		log.Printf("Warning: failed to cache week %d content: %v", weekNumber, saveErr)
+	}
+
+	return content, nil
 }
