@@ -67,15 +67,25 @@ jobs:
           token: ${{ secrets.DEPLOY_REPO_TOKEN }}
           path: babymilk-deploy
 
-      - name: Write new image tag to prod values
+      - name: Update prod image tag and ArgoCD targetRevision in deploy repo
         run: |
           cd babymilk-deploy
-          sed -i 's|tag:.*|tag: "${{ steps.version.outputs.tag }}"|' charts/babymilk/values-prod.yaml
+          TAG="${{ steps.version.outputs.tag }}"
+
+          # Update image tag in Helm values
+          sed -i "s|tag:.*|tag: \"${TAG}\"|" charts/babymilk/values-prod.yaml
+
+          # Update ArgoCD targetRevision in root-prod and prod Application manifests
+          sed -i "s|targetRevision:.*|targetRevision: refs/tags/${TAG}|" argocd/root-prod.yaml
+          sed -i "s|targetRevision:.*|targetRevision: refs/tags/${TAG}|" argocd/bootstrap/prod/prod.yaml
+
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
-          git add charts/babymilk/values-prod.yaml
-          git commit -m "chore(prod): update image tag to ${{ steps.version.outputs.tag }}"
+          git add charts/babymilk/values-prod.yaml argocd/root-prod.yaml argocd/bootstrap/prod/prod.yaml
+          git commit -m "chore(prod): update image tag to ${TAG}"
+          git tag "${TAG}"
           git push
+          git push origin "${TAG}"
 
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2

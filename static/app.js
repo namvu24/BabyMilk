@@ -105,9 +105,9 @@ function setDefaultTimes() {
     document.getElementById('endTime').value = toLocalTime(now);
 }
 
-// Set end time input to current time ("Now" button)
-function setEndTimeNow() {
-    document.getElementById('endTime').value = toLocalTime(new Date());
+// Set end time = start time ("Set" button)
+function setEndTimeFromStart() {
+    document.getElementById('endTime').value = document.getElementById('startTime').value;
 }
 
 document.addEventListener('DOMContentLoaded', () => {
