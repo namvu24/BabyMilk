@@ -33,6 +33,13 @@ type mockRepository struct {
 	sleepDeleteErr   error
 	sleepDailyErr    error
 	lastSleepInput   SleepInput
+
+	// Baby profile & development mock state
+	babyProfile      *BabyProfile
+	babyProfileErr   error
+	devCache         map[int]*DevelopmentContent
+	devCacheErr      error
+	lastDOB          string
 }
 
 func (m *mockRepository) GetFeedings(date string, tz string) ([]Feeding, error) {
@@ -159,6 +166,53 @@ func (m *mockRepository) GetSleepDailyTotals(days int, tz string) ([]DailySleepT
 func (m *mockRepository) GetSleepDailyTotalsByMonth(month string, tz string) ([]DailySleepTotal, error) {
 	m.lastDate = month
 	return m.sleepDailyTotals, m.sleepDailyErr
+}
+
+// ── Baby profile & development mock methods ──
+
+func (m *mockRepository) GetBabyProfile() (*BabyProfile, error) {
+	return m.babyProfile, m.babyProfileErr
+}
+
+func (m *mockRepository) SaveBabyProfile(dob string) (*BabyProfile, error) {
+	m.lastDOB = dob
+	if m.babyProfileErr != nil {
+		return nil, m.babyProfileErr
+	}
+	parsed, _ := time.Parse("2006-01-02", dob)
+	m.babyProfile = &BabyProfile{
+		ID:          1,
+		DateOfBirth: parsed,
+		CreatedAt:   time.Now(),
+		UpdatedAt:   time.Now(),
+	}
+	return m.babyProfile, nil
+}
+
+func (m *mockRepository) GetDevelopmentCache(weekNumber int) (*DevelopmentContent, error) {
+	if m.devCacheErr != nil {
+		return nil, m.devCacheErr
+	}
+	if m.devCache != nil {
+		if c, ok := m.devCache[weekNumber]; ok {
+			return c, nil
+		}
+	}
+	return nil, nil
+}
+
+func (m *mockRepository) SaveDevelopmentCache(weekNumber int, content string) error {
+	if m.devCache == nil {
+		m.devCache = make(map[int]*DevelopmentContent)
+	}
+	m.devCache[weekNumber] = &DevelopmentContent{
+		ID:         weekNumber,
+		WeekNumber: weekNumber,
+		Content:    content,
+		CreatedAt:  time.Now(),
+		UpdatedAt:  time.Now(),
+	}
+	return m.devCacheErr
 }
 
 func validFeedingJSON() string {

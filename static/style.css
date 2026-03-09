@@ -47,6 +47,64 @@ h1 {
     color: #fff !important;
 }
 
+/* Development tab theme color */
+.btn-dev {
+    background-color: #6f42c1;
+    border-color: #6f42c1;
+    color: #fff;
+}
+.btn-dev:hover, .btn-dev:focus, .btn-dev:active {
+    background-color: #5a32a3;
+    border-color: #5a32a3;
+    color: #fff;
+}
+.bg-dev {
+    background-color: #6f42c1 !important;
+    color: #fff !important;
+}
+
+/* Development card styling */
+.dev-card {
+    border: none;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+}
+.dev-card .card-header {
+    cursor: pointer;
+    border: none;
+}
+.dev-card .card-header .collapse-icon {
+    transition: transform 0.2s;
+    font-size: 0.8em;
+}
+.dev-card .card-header[aria-expanded="false"] .collapse-icon,
+.dev-card .card-header.collapsed .collapse-icon {
+    transform: rotate(-90deg);
+}
+
+/* Wonder week active alert */
+.wonder-week-active {
+    background: linear-gradient(135deg, #fff3cd 0%, #ffeeba 100%);
+    border: 2px solid #ffc107;
+    border-radius: 0.5rem;
+    padding: 1rem;
+}
+[data-bs-theme="dark"] .wonder-week-active {
+    background: linear-gradient(135deg, #332701 0%, #443500 100%);
+    border-color: #b38600;
+}
+
+/* Exercise cards */
+.exercise-card {
+    border: 1px solid #e9ecef;
+    transition: box-shadow 0.2s;
+}
+.exercise-card:hover {
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+}
+[data-bs-theme="dark"] .exercise-card {
+    border-color: #444;
+}
+
 /* Larger touch targets */
 .btn {
     min-height: 44px;

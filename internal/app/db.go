@@ -328,3 +328,64 @@ func (r *PostgresRepository) GetSleepDailyTotalsByMonth(month string, tz string)
 	}
 	return totals, rows.Err()
 }
+
+// ── Baby profile & development cache ──
+
+func (r *PostgresRepository) GetBabyProfile() (*BabyProfile, error) {
+	var p BabyProfile
+	err := r.DB.QueryRow(`SELECT id, date_of_birth, created_at, updated_at FROM baby_profile ORDER BY id LIMIT 1`).
+		Scan(&p.ID, &p.DateOfBirth, &p.CreatedAt, &p.UpdatedAt)
+	if err != nil {
+		if err.Error() == "sql: no rows in result set" {
+			return nil, nil
+		}
+		return nil, err
+	}
+	return &p, nil
+}
+
+func (r *PostgresRepository) SaveBabyProfile(dob string) (*BabyProfile, error) {
+	var p BabyProfile
+	// Try update first (single-row table pattern)
+	err := r.DB.QueryRow(`
+		UPDATE baby_profile SET date_of_birth = $1, updated_at = NOW()
+		WHERE id = (SELECT id FROM baby_profile ORDER BY id LIMIT 1)
+		RETURNING id, date_of_birth, created_at, updated_at`, dob).
+		Scan(&p.ID, &p.DateOfBirth, &p.CreatedAt, &p.UpdatedAt)
+	if err != nil {
+		if err.Error() == "sql: no rows in result set" {
+			// No profile exists yet — insert
+			err = r.DB.QueryRow(`
+				INSERT INTO baby_profile (date_of_birth) VALUES ($1)
+				RETURNING id, date_of_birth, created_at, updated_at`, dob).
+				Scan(&p.ID, &p.DateOfBirth, &p.CreatedAt, &p.UpdatedAt)
+			if err != nil {
+				return nil, err
+			}
+		} else {
+			return nil, err
+		}
+	}
+	return &p, nil
+}
+
+func (r *PostgresRepository) GetDevelopmentCache(weekNumber int) (*DevelopmentContent, error) {
+	var c DevelopmentContent
+	err := r.DB.QueryRow(`SELECT id, week_number, content, created_at, updated_at FROM development_cache WHERE week_number = $1`, weekNumber).
+		Scan(&c.ID, &c.WeekNumber, &c.Content, &c.CreatedAt, &c.UpdatedAt)
+	if err != nil {
+		if err.Error() == "sql: no rows in result set" {
+			return nil, nil
+		}
+		return nil, err
+	}
+	return &c, nil
+}
+
+func (r *PostgresRepository) SaveDevelopmentCache(weekNumber int, content string) error {
+	_, err := r.DB.Exec(`
+		INSERT INTO development_cache (week_number, content) VALUES ($1, $2)
+		ON CONFLICT (week_number) DO UPDATE SET content = $2, updated_at = NOW()`,
+		weekNumber, content)
+	return err
+}
