@@ -81,6 +81,88 @@ h1 {
     transform: rotate(-90deg);
 }
 
+/* ── Insight tab theme ── */
+.btn-insight {
+    background-color: #0d9488;
+    border-color: #0d9488;
+    color: #fff;
+}
+.btn-insight:hover, .btn-insight:focus, .btn-insight:active {
+    background-color: #0a7c72;
+    border-color: #0a7c72;
+    color: #fff;
+}
+.btn-outline-insight {
+    border-color: #0d9488;
+    color: #0d9488;
+}
+.btn-outline-insight:hover, .btn-outline-insight:focus, .btn-outline-insight.active {
+    background-color: #0d9488;
+    border-color: #0d9488;
+    color: #fff;
+}
+.bg-insight {
+    background-color: #0d9488 !important;
+    color: #fff !important;
+}
+
+/* Insight cards */
+.insight-card {
+    border: none;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+}
+.insight-card .card-header {
+    cursor: pointer;
+    border: none;
+}
+.insight-card .card-header .collapse-icon {
+    transition: transform 0.2s;
+    font-size: 0.8em;
+}
+.insight-card .card-header[aria-expanded="false"] .collapse-icon,
+.insight-card .card-header.collapsed .collapse-icon {
+    transform: rotate(-90deg);
+}
+
+/* Percentile badges */
+.badge-percentile {
+    font-size: 0.75rem;
+    padding: 0.25em 0.5em;
+    border-radius: 0.5rem;
+}
+.badge-percentile-low { background-color: #ef4444; color: #fff; }
+.badge-percentile-normal { background-color: #22c55e; color: #fff; }
+.badge-percentile-high { background-color: #f59e0b; color: #fff; }
+
+/* Growth history table */
+.growth-table td, .growth-table th {
+    padding: 0.4rem 0.5rem;
+    font-size: 0.85rem;
+}
+
+/* Alert banner for insights */
+.insight-alert {
+    border-radius: 0.5rem;
+    padding: 0.75rem 1rem;
+    font-size: 0.9rem;
+    margin-bottom: 0.5rem;
+}
+.insight-alert-warning { background: #fef3c7; border-left: 4px solid #f59e0b; }
+.insight-alert-danger  { background: #fee2e2; border-left: 4px solid #ef4444; }
+.insight-alert-info    { background: #e0f2fe; border-left: 4px solid #0ea5e9; }
+[data-bs-theme="dark"] .insight-alert-warning { background: #332701; border-left-color: #b38600; }
+[data-bs-theme="dark"] .insight-alert-danger  { background: #3b0b0b; border-left-color: #b91c1c; }
+[data-bs-theme="dark"] .insight-alert-info    { background: #082f49; border-left-color: #0284c7; }
+
+/* WHO chart zone colours (used in JS) */
+:root {
+    --who-p3: rgba(239, 68, 68, 0.12);
+    --who-p15: rgba(245, 158, 11, 0.12);
+    --who-p50: rgba(34, 197, 94, 0.12);
+    --who-p85: rgba(245, 158, 11, 0.12);
+    --who-p97: rgba(239, 68, 68, 0.12);
+}
+
 /* Wonder week active alert */
 .wonder-week-active {
     background: linear-gradient(135deg, #fff3cd 0%, #ffeeba 100%);
@@ -100,6 +182,21 @@ h1 {
 }
 .exercise-card:hover {
     box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+}
+.exercise-card .card-body {
+    overflow-wrap: break-word;
+    word-break: break-word;
+    min-width: 0;
+}
+.exercise-card .card-body h6 {
+    overflow-wrap: break-word;
+    word-break: break-word;
+}
+.exercise-card .badge {
+    white-space: normal;
+    text-align: left;
+    overflow-wrap: break-word;
+    word-break: break-word;
 }
 [data-bs-theme="dark"] .exercise-card {
     border-color: #444;

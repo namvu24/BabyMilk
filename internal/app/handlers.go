@@ -96,6 +96,7 @@ func (s *Server) createFeeding(w http.ResponseWriter, r *http.Request) {
 		respondError(w, http.StatusInternalServerError, err.Error())
 		return
 	}
+	_ = s.Repo.InvalidateInsightCache()
 	respondJSON(w, http.StatusCreated, feeding)
 }
 
@@ -114,6 +115,7 @@ func (s *Server) updateFeeding(w http.ResponseWriter, r *http.Request, id int) {
 		respondError(w, http.StatusInternalServerError, err.Error())
 		return
 	}
+	_ = s.Repo.InvalidateInsightCache()
 	respondJSON(w, http.StatusOK, feeding)
 }
 
@@ -126,6 +128,7 @@ func (s *Server) deleteFeeding(w http.ResponseWriter, r *http.Request, id int) {
 		}
 		return
 	}
+	_ = s.Repo.InvalidateInsightCache()
 	w.WriteHeader(http.StatusNoContent)
 }
 
@@ -242,6 +245,7 @@ func (s *Server) createSleep(w http.ResponseWriter, r *http.Request) {
 		respondError(w, http.StatusInternalServerError, err.Error())
 		return
 	}
+	_ = s.Repo.InvalidateInsightCache()
 	respondJSON(w, http.StatusCreated, sleep)
 }
 
@@ -260,6 +264,7 @@ func (s *Server) updateSleep(w http.ResponseWriter, r *http.Request, id int) {
 		respondError(w, http.StatusInternalServerError, err.Error())
 		return
 	}
+	_ = s.Repo.InvalidateInsightCache()
 	respondJSON(w, http.StatusOK, sleep)
 }
 
@@ -272,6 +277,7 @@ func (s *Server) deleteSleep(w http.ResponseWriter, r *http.Request, id int) {
 		}
 		return
 	}
+	_ = s.Repo.InvalidateInsightCache()
 	w.WriteHeader(http.StatusNoContent)
 }
 
@@ -350,11 +356,13 @@ func (s *Server) HandleBabyProfile(w http.ResponseWriter, r *http.Request) {
 			respondError(w, http.StatusBadRequest, err.Error())
 			return
 		}
-		profile, err := s.Repo.SaveBabyProfile(input.DateOfBirth)
+		profile, err := s.Repo.SaveBabyProfile(input)
 		if err != nil {
 			respondError(w, http.StatusInternalServerError, err.Error())
 			return
 		}
+		// Invalidate insight cache when profile changes
+		_ = s.Repo.InvalidateInsightCache()
 		respondJSON(w, http.StatusOK, profile)
 	default:
 		respondError(w, http.StatusMethodNotAllowed, "method not allowed")
@@ -447,4 +455,235 @@ func (s *Server) getOrGenerateWeek(weekNumber int, dob time.Time) (string, error
 	}
 
 	return content, nil
+}
+
+// ── Growth measurement handlers ──
+
+func (s *Server) HandleGrowthMeasurements(w http.ResponseWriter, r *http.Request) {
+	switch r.Method {
+	case http.MethodGet:
+		s.listGrowthMeasurements(w, r)
+	case http.MethodPost:
+		s.createGrowthMeasurement(w, r)
+	default:
+		respondError(w, http.StatusMethodNotAllowed, "method not allowed")
+	}
+}
+
+func (s *Server) HandleGrowthMeasurementByID(w http.ResponseWriter, r *http.Request) {
+	parts := strings.Split(strings.TrimPrefix(r.URL.Path, "/api/growth/"), "/")
+	id, err := strconv.Atoi(parts[0])
+	if err != nil {
+		respondError(w, http.StatusBadRequest, "invalid id")
+		return
+	}
+
+	switch r.Method {
+	case http.MethodPut:
+		s.updateGrowthMeasurement(w, r, id)
+	case http.MethodDelete:
+		s.deleteGrowthMeasurement(w, r, id)
+	default:
+		respondError(w, http.StatusMethodNotAllowed, "method not allowed")
+	}
+}
+
+func (s *Server) listGrowthMeasurements(w http.ResponseWriter, r *http.Request) {
+	limit := 50
+	if l := r.URL.Query().Get("limit"); l != "" {
+		if parsed, err := strconv.Atoi(l); err == nil && parsed > 0 {
+			limit = parsed
+		}
+	}
+	measurements, err := s.Repo.GetGrowthMeasurements(limit)
+	if err != nil {
+		respondError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	if measurements == nil {
+		measurements = []GrowthMeasurement{}
+	}
+	respondJSON(w, http.StatusOK, measurements)
+}
+
+func (s *Server) createGrowthMeasurement(w http.ResponseWriter, r *http.Request) {
+	var input GrowthMeasurementInput
+	if err := json.NewDecoder(r.Body).Decode(&input); err != nil {
+		respondError(w, http.StatusBadRequest, "invalid JSON")
+		return
+	}
+	if err := input.Validate(); err != nil {
+		respondError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	measurement, err := s.Repo.CreateGrowthMeasurement(input)
+	if err != nil {
+		respondError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	_ = s.Repo.InvalidateInsightCache()
+	respondJSON(w, http.StatusCreated, measurement)
+}
+
+func (s *Server) updateGrowthMeasurement(w http.ResponseWriter, r *http.Request, id int) {
+	var input GrowthMeasurementInput
+	if err := json.NewDecoder(r.Body).Decode(&input); err != nil {
+		respondError(w, http.StatusBadRequest, "invalid JSON")
+		return
+	}
+	if err := input.Validate(); err != nil {
+		respondError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	measurement, err := s.Repo.UpdateGrowthMeasurement(id, input)
+	if err != nil {
+		respondError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	_ = s.Repo.InvalidateInsightCache()
+	respondJSON(w, http.StatusOK, measurement)
+}
+
+func (s *Server) deleteGrowthMeasurement(w http.ResponseWriter, r *http.Request, id int) {
+	if err := s.Repo.DeleteGrowthMeasurement(id); err != nil {
+		if err.Error() == "growth measurement not found" {
+			respondError(w, http.StatusNotFound, err.Error())
+		} else {
+			respondError(w, http.StatusInternalServerError, err.Error())
+		}
+		return
+	}
+	_ = s.Repo.InvalidateInsightCache()
+	w.WriteHeader(http.StatusNoContent)
+}
+
+// ── Insights handler ──
+
+func (s *Server) HandleInsights(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		respondError(w, http.StatusMethodNotAllowed, "method not allowed")
+		return
+	}
+
+	// Get baby profile
+	profile, err := s.Repo.GetBabyProfile()
+	if err != nil {
+		respondError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	if profile == nil {
+		respondError(w, http.StatusBadRequest, "please set baby date of birth first")
+		return
+	}
+
+	// Calculate cache key based on current week
+	now := time.Now()
+	ageInDays := int(now.Sub(profile.DateOfBirth).Hours() / 24)
+	currentWeek := ageInDays / 7
+
+	cacheKey := fmt.Sprintf("insight-week-%d", currentWeek)
+
+	// Check cache
+	cached, err := s.Repo.GetInsightCache(cacheKey)
+	if err != nil {
+		log.Printf("Warning: failed to check insight cache: %v", err)
+	}
+	if cached != nil {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusOK)
+		fmt.Fprint(w, cached.Content)
+		return
+	}
+
+	// Gather data for insight generation
+	latestGrowth, _ := s.Repo.GetLatestGrowthMeasurement()
+	feedingAvg, _ := s.Repo.GetFeedingDailyAvg(7)
+	sleepAvg, _ := s.Repo.GetSleepDailyAvg(7)
+
+	// Generate via Gemini
+	if s.Gemini == nil {
+		respondError(w, http.StatusServiceUnavailable, "AI service is not configured (missing GEMINI_API_KEY)")
+		return
+	}
+
+	content, err := s.Gemini.GeneratePersonalizedInsight(*profile, latestGrowth, feedingAvg, sleepAvg)
+	if err != nil {
+		respondError(w, http.StatusInternalServerError, fmt.Sprintf("Failed to generate insights: %v", err))
+		return
+	}
+
+	// Cache for 24 hours
+	expiresAt := now.Add(24 * time.Hour)
+	if saveErr := s.Repo.SaveInsightCache(cacheKey, content, expiresAt); saveErr != nil {
+		log.Printf("Warning: failed to cache insight: %v", saveErr)
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
+	fmt.Fprint(w, content)
+}
+
+// ── WHO data handler ──
+
+func (s *Server) HandleWHOData(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		respondError(w, http.StatusMethodNotAllowed, "method not allowed")
+		return
+	}
+
+	gender := r.URL.Query().Get("gender")
+	if gender == "" {
+		gender = "male"
+	}
+	metric := r.URL.Query().Get("metric")
+	if metric == "" {
+		metric = "weight"
+	}
+	months := 24
+	if m := r.URL.Query().Get("months"); m != "" {
+		if parsed, err := strconv.Atoi(m); err == nil && parsed > 0 {
+			months = parsed
+		}
+	}
+
+	data := GetWHOCurveData(gender, metric, months)
+	if data == nil {
+		respondError(w, http.StatusBadRequest, "invalid metric, use 'weight' or 'length'")
+		return
+	}
+
+	// Also include baby's actual measurements if available
+	type WHOResponse struct {
+		*WHOPercentileData
+		BabyData []struct {
+			Month  int     `json:"month"`
+			Value  float64 `json:"value"`
+		} `json:"baby_data"`
+	}
+
+	resp := WHOResponse{WHOPercentileData: data}
+
+	// Get growth measurements to overlay
+	measurements, err := s.Repo.GetGrowthMeasurements(100)
+	if err == nil && len(measurements) > 0 {
+		profile, _ := s.Repo.GetBabyProfile()
+		if profile != nil {
+			for _, m := range measurements {
+				ageInDays := int(m.Date.Sub(profile.DateOfBirth).Hours() / 24)
+				ageMonth := ageInDays / 30
+				var value float64
+				if metric == "weight" {
+					value = m.WeightKg
+				} else {
+					value = m.LengthCm
+				}
+				resp.BabyData = append(resp.BabyData, struct {
+					Month  int     `json:"month"`
+					Value  float64 `json:"value"`
+				}{Month: ageMonth, Value: value})
+			}
+		}
+	}
+
+	respondJSON(w, http.StatusOK, resp)
 }

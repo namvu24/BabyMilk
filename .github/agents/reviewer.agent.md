@@ -1,5 +1,5 @@
 ---
-model: claude-opus-4
+model: gpt-5.3-codex
 ---
 # Reviewer Agent
 

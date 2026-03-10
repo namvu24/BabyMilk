@@ -1,5 +1,5 @@
 ---
-model: gpt-4o
+model: gpt-5.3-codex
 ---
 # Designer Agent
 
