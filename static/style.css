@@ -101,6 +101,21 @@ h1 {
 .exercise-card:hover {
     box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
 }
+.exercise-card .card-body {
+    overflow-wrap: break-word;
+    word-break: break-word;
+    min-width: 0;
+}
+.exercise-card .card-body h6 {
+    overflow-wrap: break-word;
+    word-break: break-word;
+}
+.exercise-card .badge {
+    white-space: normal;
+    text-align: left;
+    overflow-wrap: break-word;
+    word-break: break-word;
+}
 [data-bs-theme="dark"] .exercise-card {
     border-color: #444;
 }
