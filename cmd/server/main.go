@@ -49,6 +49,14 @@ func main() {
 	mux.HandleFunc("/api/baby", srv.HandleBabyProfile)
 	mux.HandleFunc("/api/development", srv.HandleDevelopment)
 
+	// API routes — Growth measurements
+	mux.HandleFunc("/api/growth/", srv.HandleGrowthMeasurementByID)
+	mux.HandleFunc("/api/growth", srv.HandleGrowthMeasurements)
+
+	// API routes — Insights & WHO data
+	mux.HandleFunc("/api/insights", srv.HandleInsights)
+	mux.HandleFunc("/api/who-data", srv.HandleWHOData)
+
 	port := os.Getenv("PORT")
 	if port == "" {
 		port = "8080"

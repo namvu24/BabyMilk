@@ -27,6 +27,9 @@
             <li class="nav-item" role="presentation">
                 <button class="nav-link" id="dev-tab" data-bs-toggle="tab" data-bs-target="#developmentPane" type="button" role="tab" aria-selected="false">🧒 Development</button>
             </li>
+            <li class="nav-item" role="presentation">
+                <button class="nav-link" id="insights-tab" data-bs-toggle="tab" data-bs-target="#insightsPane" type="button" role="tab" aria-selected="false">📊 Insights</button>
+            </li>
         </ul>
 
         <div class="tab-content">
@@ -203,14 +206,40 @@
         <!-- DOB Setup (shown when no profile exists) -->
         <div id="dobSetup" class="card mb-4">
             <div class="card-body text-center">
-                <h5 class="card-title">👶 Set Baby's Date of Birth</h5>
-                <p class="text-muted">Enter your baby's date of birth to get personalized development information powered by AI.</p>
-                <div class="row justify-content-center">
+                <h5 class="card-title">👶 Set Baby's Profile</h5>
+                <p class="text-muted">Enter your baby's details to get personalized development information powered by AI.</p>
+                <div class="row justify-content-center g-3">
                     <div class="col-auto">
-                        <div class="input-group">
-                            <input type="date" class="form-control" id="babyDob" required>
-                            <button class="btn btn-dev" onclick="saveBabyProfile()">Save</button>
+                        <label for="babyDob" class="form-label">Date of Birth</label>
+                        <input type="date" class="form-control" id="babyDob" required>
+                    </div>
+                    <div class="col-auto">
+                        <label for="babyName" class="form-label">Name (optional)</label>
+                        <input type="text" class="form-control" id="babyName" placeholder="Baby's name">
+                    </div>
+                    <div class="col-auto">
+                        <label class="form-label">Gender</label>
+                        <div class="d-flex gap-3 mt-1">
+                            <div class="form-check">
+                                <input class="form-check-input" type="radio" name="babyGender" id="genderMale" value="male">
+                                <label class="form-check-label" for="genderMale">👦 Boy</label>
+                            </div>
+                            <div class="form-check">
+                                <input class="form-check-input" type="radio" name="babyGender" id="genderFemale" value="female">
+                                <label class="form-check-label" for="genderFemale">👧 Girl</label>
+                            </div>
                         </div>
+                    </div>
+                    <div class="col-auto">
+                        <label for="babyMilkType" class="form-label">Milk Type</label>
+                        <select class="form-select" id="babyMilkType">
+                            <option value="formula">🍼 Formula</option>
+                            <option value="breast">🤱 Breast</option>
+                            <option value="mixed">🔄 Mixed</option>
+                        </select>
+                    </div>
+                    <div class="col-12">
+                        <button class="btn btn-dev" onclick="saveBabyProfile()">Save</button>
                     </div>
                 </div>
             </div>
@@ -296,6 +325,149 @@
         </div>
 
             </div><!-- /developmentPane -->
+
+            <!-- ═══════════ INSIGHTS TAB ═══════════ -->
+            <div class="tab-pane fade" id="insightsPane" role="tabpanel">
+
+        <!-- Alerts Banner -->
+        <div id="insightAlerts" class="d-none"></div>
+
+        <!-- Medical Disclaimer -->
+        <div class="alert alert-light border mb-4" style="font-size:0.8rem">
+            ⚕️ <strong>Disclaimer:</strong> This information is for reference only and does not constitute medical advice. Always consult your pediatrician for health concerns.
+        </div>
+
+        <!-- Profile not set message -->
+        <div id="insightNoProfile" class="card mb-4 d-none">
+            <div class="card-body text-center">
+                <h5>📊 Personalized Insights</h5>
+                <p class="text-muted">Please set your baby's profile in the Development tab first to get personalized insights.</p>
+            </div>
+        </div>
+
+        <!-- Growth Card -->
+        <div id="insightGrowthCard" class="card mb-4 d-none">
+            <div class="card-body">
+                <div class="d-flex justify-content-between align-items-center mb-3">
+                    <h5 class="card-title mb-0">📏 Growth</h5>
+                    <button class="btn btn-outline-insight btn-sm" onclick="toggleGrowthForm()">➕ Add Measurement</button>
+                </div>
+                <div id="latestGrowthInfo" class="mb-3"></div>
+
+                <!-- Add Growth Measurement Form (hidden by default) -->
+                <div id="growthForm" class="d-none border rounded p-3 mb-3">
+                    <h6>Add Growth Measurement</h6>
+                    <form onsubmit="addGrowthMeasurement(event)">
+                        <div class="row g-2">
+                            <div class="col-6 col-md-3">
+                                <label for="growthDate" class="form-label">Date</label>
+                                <input type="date" class="form-control" id="growthDate" required>
+                            </div>
+                            <div class="col-6 col-md-3">
+                                <label for="growthWeight" class="form-label">Weight (kg)</label>
+                                <input type="number" step="0.01" min="0.5" max="30" class="form-control" id="growthWeight" required>
+                            </div>
+                            <div class="col-6 col-md-3">
+                                <label for="growthLength" class="form-label">Length (cm)</label>
+                                <input type="number" step="0.1" min="30" max="130" class="form-control" id="growthLength" required>
+                            </div>
+                            <div class="col-6 col-md-3">
+                                <label for="growthHead" class="form-label">Head (cm) <small class="text-muted">opt.</small></label>
+                                <input type="number" step="0.1" min="20" max="60" class="form-control" id="growthHead">
+                            </div>
+                        </div>
+                        <div class="mt-2">
+                            <button type="submit" class="btn btn-insight btn-sm">Save</button>
+                            <button type="button" class="btn btn-secondary btn-sm" onclick="toggleGrowthForm()">Cancel</button>
+                        </div>
+                    </form>
+                </div>
+
+                <!-- Growth History -->
+                <div id="growthHistory" class="mb-3"></div>
+            </div>
+        </div>
+
+        <!-- WHO Chart -->
+        <div id="insightChartCard" class="card mb-4 d-none">
+            <div class="card-body">
+                <div class="d-flex justify-content-between align-items-center mb-3">
+                    <h5 class="card-title mb-0">📈 WHO Growth Chart</h5>
+                    <div class="btn-group btn-group-sm">
+                        <button class="btn btn-outline-insight active" id="whoWeightBtn" onclick="loadWHOChart('weight')">Weight</button>
+                        <button class="btn btn-outline-insight" id="whoLengthBtn" onclick="loadWHOChart('length')">Length</button>
+                    </div>
+                </div>
+                <div style="position:relative; height:300px;">
+                    <canvas id="whoChart"></canvas>
+                </div>
+            </div>
+        </div>
+
+        <!-- AI Assessment Loading -->
+        <div id="insightLoading" class="text-center py-5 d-none">
+            <div class="spinner-border text-secondary" role="status" style="width:3rem;height:3rem"></div>
+            <p class="text-muted mt-3">Generating personalized insights with AI...<br><small>This may take a moment</small></p>
+        </div>
+
+        <!-- AI Assessment Cards -->
+        <div id="insightContent" class="d-none">
+
+            <!-- Growth Assessment -->
+            <div class="card mb-3 insight-card">
+                <div class="card-header bg-insight text-white d-flex justify-content-between align-items-center" role="button" data-bs-toggle="collapse" data-bs-target="#insightGrowthCollapse">
+                    <h6 class="mb-0"><span id="growthStatusIcon">📊</span> Growth Assessment</h6>
+                    <span class="collapse-icon">▼</span>
+                </div>
+                <div id="insightGrowthCollapse" class="collapse show">
+                    <div class="card-body" id="insightGrowthContent"></div>
+                </div>
+            </div>
+
+            <!-- Feeding Analysis -->
+            <div class="card mb-3 insight-card">
+                <div class="card-header bg-insight text-white d-flex justify-content-between align-items-center" role="button" data-bs-toggle="collapse" data-bs-target="#insightFeedingCollapse">
+                    <h6 class="mb-0"><span id="feedingStatusIcon">🍼</span> Feeding Analysis</h6>
+                    <span class="collapse-icon">▼</span>
+                </div>
+                <div id="insightFeedingCollapse" class="collapse show">
+                    <div class="card-body" id="insightFeedingContent"></div>
+                </div>
+            </div>
+
+            <!-- Sleep Analysis -->
+            <div class="card mb-3 insight-card">
+                <div class="card-header bg-insight text-white d-flex justify-content-between align-items-center" role="button" data-bs-toggle="collapse" data-bs-target="#insightSleepCollapse">
+                    <h6 class="mb-0"><span id="sleepStatusIcon">😴</span> Sleep Analysis</h6>
+                    <span class="collapse-icon">▼</span>
+                </div>
+                <div id="insightSleepCollapse" class="collapse show">
+                    <div class="card-body" id="insightSleepContent"></div>
+                </div>
+            </div>
+
+            <!-- Personalized Activities -->
+            <div class="card mb-3 insight-card">
+                <div class="card-header bg-insight text-white d-flex justify-content-between align-items-center" role="button" data-bs-toggle="collapse" data-bs-target="#insightActivitiesCollapse">
+                    <h6 class="mb-0">🤸 Personalized Activities</h6>
+                    <span class="collapse-icon">▼</span>
+                </div>
+                <div id="insightActivitiesCollapse" class="collapse show">
+                    <div class="card-body" id="insightActivitiesContent"></div>
+                </div>
+            </div>
+
+            <!-- Summary -->
+            <div class="card mb-3 insight-card">
+                <div class="card-body">
+                    <h6>📝 Overall Summary</h6>
+                    <p id="insightSummary" class="mb-0 text-muted"></p>
+                </div>
+            </div>
+
+        </div><!-- /insightContent -->
+
+            </div><!-- /insightsPane -->
         </div><!-- /tab-content -->
     </div>
 

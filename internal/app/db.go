@@ -333,32 +333,45 @@ func (r *PostgresRepository) GetSleepDailyTotalsByMonth(month string, tz string)
 
 func (r *PostgresRepository) GetBabyProfile() (*BabyProfile, error) {
 	var p BabyProfile
-	err := r.DB.QueryRow(`SELECT id, date_of_birth, created_at, updated_at FROM baby_profile ORDER BY id LIMIT 1`).
-		Scan(&p.ID, &p.DateOfBirth, &p.CreatedAt, &p.UpdatedAt)
+	var name, gender, milkType sql.NullString
+	err := r.DB.QueryRow(`SELECT id, date_of_birth, name, gender, milk_type, created_at, updated_at FROM baby_profile ORDER BY id LIMIT 1`).
+		Scan(&p.ID, &p.DateOfBirth, &name, &gender, &milkType, &p.CreatedAt, &p.UpdatedAt)
 	if err != nil {
 		if err.Error() == "sql: no rows in result set" {
 			return nil, nil
 		}
 		return nil, err
 	}
+	if name.Valid {
+		p.Name = name.String
+	}
+	if gender.Valid {
+		p.Gender = gender.String
+	}
+	if milkType.Valid {
+		p.MilkType = milkType.String
+	}
 	return &p, nil
 }
 
-func (r *PostgresRepository) SaveBabyProfile(dob string) (*BabyProfile, error) {
+func (r *PostgresRepository) SaveBabyProfile(input BabyProfileInput) (*BabyProfile, error) {
 	var p BabyProfile
+	var name, gender, milkType sql.NullString
 	// Try update first (single-row table pattern)
 	err := r.DB.QueryRow(`
-		UPDATE baby_profile SET date_of_birth = $1, updated_at = NOW()
+		UPDATE baby_profile SET date_of_birth = $1, name = $2, gender = $3, milk_type = $4, updated_at = NOW()
 		WHERE id = (SELECT id FROM baby_profile ORDER BY id LIMIT 1)
-		RETURNING id, date_of_birth, created_at, updated_at`, dob).
-		Scan(&p.ID, &p.DateOfBirth, &p.CreatedAt, &p.UpdatedAt)
+		RETURNING id, date_of_birth, name, gender, milk_type, created_at, updated_at`,
+		input.DateOfBirth, toNullString(input.Name), toNullString(input.Gender), toNullString(input.MilkType)).
+		Scan(&p.ID, &p.DateOfBirth, &name, &gender, &milkType, &p.CreatedAt, &p.UpdatedAt)
 	if err != nil {
 		if err.Error() == "sql: no rows in result set" {
 			// No profile exists yet — insert
 			err = r.DB.QueryRow(`
-				INSERT INTO baby_profile (date_of_birth) VALUES ($1)
-				RETURNING id, date_of_birth, created_at, updated_at`, dob).
-				Scan(&p.ID, &p.DateOfBirth, &p.CreatedAt, &p.UpdatedAt)
+				INSERT INTO baby_profile (date_of_birth, name, gender, milk_type) VALUES ($1, $2, $3, $4)
+				RETURNING id, date_of_birth, name, gender, milk_type, created_at, updated_at`,
+				input.DateOfBirth, toNullString(input.Name), toNullString(input.Gender), toNullString(input.MilkType)).
+				Scan(&p.ID, &p.DateOfBirth, &name, &gender, &milkType, &p.CreatedAt, &p.UpdatedAt)
 			if err != nil {
 				return nil, err
 			}
@@ -366,7 +379,23 @@ func (r *PostgresRepository) SaveBabyProfile(dob string) (*BabyProfile, error) {
 			return nil, err
 		}
 	}
+	if name.Valid {
+		p.Name = name.String
+	}
+	if gender.Valid {
+		p.Gender = gender.String
+	}
+	if milkType.Valid {
+		p.MilkType = milkType.String
+	}
 	return &p, nil
+}
+
+func toNullString(s string) sql.NullString {
+	if s == "" {
+		return sql.NullString{}
+	}
+	return sql.NullString{String: s, Valid: true}
 }
 
 func (r *PostgresRepository) GetDevelopmentCache(weekNumber int) (*DevelopmentContent, error) {
@@ -388,4 +417,213 @@ func (r *PostgresRepository) SaveDevelopmentCache(weekNumber int, content string
 		ON CONFLICT (week_number) DO UPDATE SET content = $2, updated_at = NOW()`,
 		weekNumber, content)
 	return err
+}
+
+// ── Growth measurement methods ──
+
+func (r *PostgresRepository) GetGrowthMeasurements(limit int) ([]GrowthMeasurement, error) {
+	if limit <= 0 {
+		limit = 50
+	}
+	rows, err := r.DB.Query(
+		`SELECT id, date, weight_kg, length_cm, head_circumference_cm, notes, created_at, updated_at
+		 FROM growth_measurements ORDER BY date DESC LIMIT $1`, limit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	return scanGrowthRows(rows)
+}
+
+func (r *PostgresRepository) GetGrowthMeasurementsByRange(from, to time.Time) ([]GrowthMeasurement, error) {
+	rows, err := r.DB.Query(
+		`SELECT id, date, weight_kg, length_cm, head_circumference_cm, notes, created_at, updated_at
+		 FROM growth_measurements WHERE date >= $1 AND date <= $2 ORDER BY date`, from, to)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	return scanGrowthRows(rows)
+}
+
+func (r *PostgresRepository) GetLatestGrowthMeasurement() (*GrowthMeasurement, error) {
+	var g GrowthMeasurement
+	var headCirc sql.NullFloat64
+	var notes sql.NullString
+	err := r.DB.QueryRow(
+		`SELECT id, date, weight_kg, length_cm, head_circumference_cm, notes, created_at, updated_at
+		 FROM growth_measurements ORDER BY date DESC LIMIT 1`).
+		Scan(&g.ID, &g.Date, &g.WeightKg, &g.LengthCm, &headCirc, &notes, &g.CreatedAt, &g.UpdatedAt)
+	if err != nil {
+		if err == sql.ErrNoRows {
+			return nil, nil
+		}
+		return nil, err
+	}
+	if headCirc.Valid {
+		g.HeadCircumferenceCm = &headCirc.Float64
+	}
+	if notes.Valid {
+		g.Notes = notes.String
+	}
+	return &g, nil
+}
+
+func (r *PostgresRepository) CreateGrowthMeasurement(input GrowthMeasurementInput) (GrowthMeasurement, error) {
+	var g GrowthMeasurement
+	var headCirc sql.NullFloat64
+	var notesScan sql.NullString
+	if input.HeadCircumferenceCm != nil {
+		headCirc = sql.NullFloat64{Float64: *input.HeadCircumferenceCm, Valid: true}
+	}
+	err := r.DB.QueryRow(
+		`INSERT INTO growth_measurements (date, weight_kg, length_cm, head_circumference_cm, notes)
+		 VALUES ($1, $2, $3, $4, $5)
+		 RETURNING id, date, weight_kg, length_cm, head_circumference_cm, notes, created_at, updated_at`,
+		input.Date, input.WeightKg, input.LengthCm, headCirc, toNullString(input.Notes)).
+		Scan(&g.ID, &g.Date, &g.WeightKg, &g.LengthCm, &headCirc, &notesScan, &g.CreatedAt, &g.UpdatedAt)
+	if err != nil {
+		return GrowthMeasurement{}, err
+	}
+	if headCirc.Valid {
+		g.HeadCircumferenceCm = &headCirc.Float64
+	}
+	if notesScan.Valid {
+		g.Notes = notesScan.String
+	}
+	return g, nil
+}
+
+func (r *PostgresRepository) UpdateGrowthMeasurement(id int, input GrowthMeasurementInput) (GrowthMeasurement, error) {
+	var g GrowthMeasurement
+	var headCirc sql.NullFloat64
+	var notesScan sql.NullString
+	if input.HeadCircumferenceCm != nil {
+		headCirc = sql.NullFloat64{Float64: *input.HeadCircumferenceCm, Valid: true}
+	}
+	err := r.DB.QueryRow(
+		`UPDATE growth_measurements SET date=$1, weight_kg=$2, length_cm=$3, head_circumference_cm=$4, notes=$5, updated_at=NOW()
+		 WHERE id=$6
+		 RETURNING id, date, weight_kg, length_cm, head_circumference_cm, notes, created_at, updated_at`,
+		input.Date, input.WeightKg, input.LengthCm, headCirc, toNullString(input.Notes), id).
+		Scan(&g.ID, &g.Date, &g.WeightKg, &g.LengthCm, &headCirc, &notesScan, &g.CreatedAt, &g.UpdatedAt)
+	if err != nil {
+		return GrowthMeasurement{}, err
+	}
+	if headCirc.Valid {
+		g.HeadCircumferenceCm = &headCirc.Float64
+	}
+	if notesScan.Valid {
+		g.Notes = notesScan.String
+	}
+	return g, nil
+}
+
+func (r *PostgresRepository) DeleteGrowthMeasurement(id int) error {
+	result, err := r.DB.Exec(`DELETE FROM growth_measurements WHERE id=$1`, id)
+	if err != nil {
+		return err
+	}
+	rows, err := result.RowsAffected()
+	if err != nil {
+		return err
+	}
+	if rows == 0 {
+		return fmt.Errorf("growth measurement not found")
+	}
+	return nil
+}
+
+func scanGrowthRows(rows *sql.Rows) ([]GrowthMeasurement, error) {
+	var measurements []GrowthMeasurement
+	for rows.Next() {
+		var g GrowthMeasurement
+		var headCirc sql.NullFloat64
+		var notes sql.NullString
+		if err := rows.Scan(&g.ID, &g.Date, &g.WeightKg, &g.LengthCm, &headCirc, &notes, &g.CreatedAt, &g.UpdatedAt); err != nil {
+			return nil, err
+		}
+		if headCirc.Valid {
+			g.HeadCircumferenceCm = &headCirc.Float64
+		}
+		if notes.Valid {
+			g.Notes = notes.String
+		}
+		measurements = append(measurements, g)
+	}
+	return measurements, rows.Err()
+}
+
+// ── Insight cache methods ──
+
+func (r *PostgresRepository) GetInsightCache(key string) (*InsightCache, error) {
+	var c InsightCache
+	err := r.DB.QueryRow(
+		`SELECT id, cache_key, content, expires_at, created_at FROM insights_cache
+		 WHERE cache_key = $1 AND (expires_at IS NULL OR expires_at > NOW())`, key).
+		Scan(&c.ID, &c.CacheKey, &c.Content, &c.ExpiresAt, &c.CreatedAt)
+	if err != nil {
+		if err == sql.ErrNoRows {
+			return nil, nil
+		}
+		return nil, err
+	}
+	return &c, nil
+}
+
+func (r *PostgresRepository) SaveInsightCache(key, content string, expiresAt time.Time) error {
+	_, err := r.DB.Exec(`
+		INSERT INTO insights_cache (cache_key, content, expires_at) VALUES ($1, $2, $3)
+		ON CONFLICT (cache_key) DO UPDATE SET content = $2, expires_at = $3, created_at = NOW()`,
+		key, content, expiresAt)
+	return err
+}
+
+func (r *PostgresRepository) InvalidateInsightCache() error {
+	_, err := r.DB.Exec(`DELETE FROM insights_cache`)
+	return err
+}
+
+// ── Aggregation methods for insights ──
+
+func (r *PostgresRepository) GetFeedingDailyAvg(days int) (int, error) {
+	if days <= 0 {
+		days = 7
+	}
+	var avg sql.NullFloat64
+	err := r.DB.QueryRow(`
+		SELECT AVG(daily_total) FROM (
+			SELECT SUM(amount_ml) AS daily_total
+			FROM feedings
+			WHERE start_time >= NOW() - INTERVAL '1 day' * $1
+			GROUP BY start_time::date
+		) sub`, days).Scan(&avg)
+	if err != nil {
+		return 0, err
+	}
+	if !avg.Valid {
+		return 0, nil
+	}
+	return int(avg.Float64), nil
+}
+
+func (r *PostgresRepository) GetSleepDailyAvg(days int) (int, error) {
+	if days <= 0 {
+		days = 7
+	}
+	var avg sql.NullFloat64
+	err := r.DB.QueryRow(`
+		SELECT AVG(daily_total) FROM (
+			SELECT SUM(EXTRACT(EPOCH FROM (end_time - start_time)) / 60)::int AS daily_total
+			FROM sleeps
+			WHERE start_time >= NOW() - INTERVAL '1 day' * $1
+			GROUP BY start_time::date
+		) sub`, days).Scan(&avg)
+	if err != nil {
+		return 0, err
+	}
+	if !avg.Valid {
+		return 0, nil
+	}
+	return int(avg.Float64), nil
 }

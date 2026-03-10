@@ -40,6 +40,19 @@ type mockRepository struct {
 	devCache         map[int]*DevelopmentContent
 	devCacheErr      error
 	lastDOB          string
+
+	// Growth measurement mock state
+	growthMeasurements []GrowthMeasurement
+	growthGetErr       error
+	growthCreateErr    error
+	growthUpdateErr    error
+	growthDeleteErr    error
+	lastGrowthInput    GrowthMeasurementInput
+
+	// Insight cache mock state
+	insightCache    map[string]*InsightCache
+	feedingDailyAvg int
+	sleepDailyAvg   int
 }
 
 func (m *mockRepository) GetFeedings(date string, tz string) ([]Feeding, error) {
@@ -174,15 +187,18 @@ func (m *mockRepository) GetBabyProfile() (*BabyProfile, error) {
 	return m.babyProfile, m.babyProfileErr
 }
 
-func (m *mockRepository) SaveBabyProfile(dob string) (*BabyProfile, error) {
-	m.lastDOB = dob
+func (m *mockRepository) SaveBabyProfile(input BabyProfileInput) (*BabyProfile, error) {
+	m.lastDOB = input.DateOfBirth
 	if m.babyProfileErr != nil {
 		return nil, m.babyProfileErr
 	}
-	parsed, _ := time.Parse("2006-01-02", dob)
+	parsed, _ := time.Parse("2006-01-02", input.DateOfBirth)
 	m.babyProfile = &BabyProfile{
 		ID:          1,
 		DateOfBirth: parsed,
+		Name:        input.Name,
+		Gender:      input.Gender,
+		MilkType:    input.MilkType,
 		CreatedAt:   time.Now(),
 		UpdatedAt:   time.Now(),
 	}
@@ -213,6 +229,90 @@ func (m *mockRepository) SaveDevelopmentCache(weekNumber int, content string) er
 		UpdatedAt:  time.Now(),
 	}
 	return m.devCacheErr
+}
+
+// ── Growth measurement mock methods ──
+
+func (m *mockRepository) GetGrowthMeasurements(limit int) ([]GrowthMeasurement, error) {
+	return m.growthMeasurements, m.growthGetErr
+}
+
+func (m *mockRepository) GetGrowthMeasurementsByRange(from, to time.Time) ([]GrowthMeasurement, error) {
+	return m.growthMeasurements, m.growthGetErr
+}
+
+func (m *mockRepository) GetLatestGrowthMeasurement() (*GrowthMeasurement, error) {
+	if m.growthGetErr != nil {
+		return nil, m.growthGetErr
+	}
+	if len(m.growthMeasurements) == 0 {
+		return nil, nil
+	}
+	return &m.growthMeasurements[0], nil
+}
+
+func (m *mockRepository) CreateGrowthMeasurement(input GrowthMeasurementInput) (GrowthMeasurement, error) {
+	m.lastGrowthInput = input
+	if m.growthCreateErr != nil {
+		return GrowthMeasurement{}, m.growthCreateErr
+	}
+	return GrowthMeasurement{
+		ID:       1,
+		WeightKg: input.WeightKg,
+		LengthCm: input.LengthCm,
+		Date:     time.Now(),
+	}, nil
+}
+
+func (m *mockRepository) UpdateGrowthMeasurement(id int, input GrowthMeasurementInput) (GrowthMeasurement, error) {
+	m.lastID = id
+	m.lastGrowthInput = input
+	if m.growthUpdateErr != nil {
+		return GrowthMeasurement{}, m.growthUpdateErr
+	}
+	return GrowthMeasurement{
+		ID:       id,
+		WeightKg: input.WeightKg,
+		LengthCm: input.LengthCm,
+		Date:     time.Now(),
+	}, nil
+}
+
+func (m *mockRepository) DeleteGrowthMeasurement(id int) error {
+	m.lastID = id
+	return m.growthDeleteErr
+}
+
+// ── Insight cache mock methods ──
+
+func (m *mockRepository) GetInsightCache(key string) (*InsightCache, error) {
+	if m.insightCache != nil {
+		if c, ok := m.insightCache[key]; ok {
+			return c, nil
+		}
+	}
+	return nil, nil
+}
+
+func (m *mockRepository) SaveInsightCache(key, content string, expiresAt time.Time) error {
+	if m.insightCache == nil {
+		m.insightCache = make(map[string]*InsightCache)
+	}
+	m.insightCache[key] = &InsightCache{CacheKey: key, Content: content, ExpiresAt: expiresAt}
+	return nil
+}
+
+func (m *mockRepository) InvalidateInsightCache() error {
+	m.insightCache = nil
+	return nil
+}
+
+func (m *mockRepository) GetFeedingDailyAvg(days int) (int, error) {
+	return m.feedingDailyAvg, nil
+}
+
+func (m *mockRepository) GetSleepDailyAvg(days int) (int, error) {
+	return m.sleepDailyAvg, nil
 }
 
 func validFeedingJSON() string {
@@ -964,5 +1064,188 @@ func TestHandleLastSleep_MethodNotAllowed(t *testing.T) {
 
 	if w.Code != http.StatusMethodNotAllowed {
 		t.Errorf("expected 405, got %d", w.Code)
+	}
+}
+
+// --- HandleGrowthMeasurements tests ---
+
+func TestHandleGrowthMeasurements_GET_Success(t *testing.T) {
+	mock := &mockRepository{
+		growthMeasurements: []GrowthMeasurement{
+			{ID: 1, WeightKg: 5.5, LengthCm: 55, Date: time.Now()},
+		},
+	}
+	srv := NewServer(mock)
+
+	req := httptest.NewRequest(http.MethodGet, "/api/growth", nil)
+	w := httptest.NewRecorder()
+	srv.HandleGrowthMeasurements(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Errorf("expected 200, got %d", w.Code)
+	}
+	var result []GrowthMeasurement
+	json.Unmarshal(w.Body.Bytes(), &result)
+	if len(result) != 1 {
+		t.Errorf("expected 1 measurement, got %d", len(result))
+	}
+}
+
+func TestHandleGrowthMeasurements_POST_Success(t *testing.T) {
+	mock := &mockRepository{}
+	srv := NewServer(mock)
+
+	body := strings.NewReader(`{"date":"2025-06-15","weight_kg":5.5,"length_cm":55.0}`)
+	req := httptest.NewRequest(http.MethodPost, "/api/growth", body)
+	w := httptest.NewRecorder()
+	srv.HandleGrowthMeasurements(w, req)
+
+	if w.Code != http.StatusCreated {
+		t.Errorf("expected 201, got %d", w.Code)
+	}
+	if mock.lastGrowthInput.WeightKg != 5.5 {
+		t.Errorf("expected weight 5.5, got %f", mock.lastGrowthInput.WeightKg)
+	}
+}
+
+func TestHandleGrowthMeasurements_POST_InvalidJSON(t *testing.T) {
+	mock := &mockRepository{}
+	srv := NewServer(mock)
+
+	body := strings.NewReader(`{bad json}`)
+	req := httptest.NewRequest(http.MethodPost, "/api/growth", body)
+	w := httptest.NewRecorder()
+	srv.HandleGrowthMeasurements(w, req)
+
+	if w.Code != http.StatusBadRequest {
+		t.Errorf("expected 400, got %d", w.Code)
+	}
+}
+
+func TestHandleGrowthMeasurements_POST_ValidationError(t *testing.T) {
+	mock := &mockRepository{}
+	srv := NewServer(mock)
+
+	body := strings.NewReader(`{"date":"2025-06-15","weight_kg":0.1,"length_cm":55}`)
+	req := httptest.NewRequest(http.MethodPost, "/api/growth", body)
+	w := httptest.NewRecorder()
+	srv.HandleGrowthMeasurements(w, req)
+
+	if w.Code != http.StatusBadRequest {
+		t.Errorf("expected 400, got %d", w.Code)
+	}
+}
+
+func TestHandleGrowthMeasurements_MethodNotAllowed(t *testing.T) {
+	mock := &mockRepository{}
+	srv := NewServer(mock)
+
+	req := httptest.NewRequest(http.MethodDelete, "/api/growth", nil)
+	w := httptest.NewRecorder()
+	srv.HandleGrowthMeasurements(w, req)
+
+	if w.Code != http.StatusMethodNotAllowed {
+		t.Errorf("expected 405, got %d", w.Code)
+	}
+}
+
+// --- HandleGrowthMeasurementByID tests ---
+
+func TestHandleGrowthMeasurementByID_DELETE_Success(t *testing.T) {
+	mock := &mockRepository{}
+	srv := NewServer(mock)
+
+	req := httptest.NewRequest(http.MethodDelete, "/api/growth/1", nil)
+	w := httptest.NewRecorder()
+	srv.HandleGrowthMeasurementByID(w, req)
+
+	if w.Code != http.StatusNoContent {
+		t.Errorf("expected 204, got %d", w.Code)
+	}
+	if mock.lastID != 1 {
+		t.Errorf("expected deleted ID 1, got %d", mock.lastID)
+	}
+}
+
+func TestHandleGrowthMeasurementByID_DELETE_InvalidID(t *testing.T) {
+	mock := &mockRepository{}
+	srv := NewServer(mock)
+
+	req := httptest.NewRequest(http.MethodDelete, "/api/growth/abc", nil)
+	w := httptest.NewRecorder()
+	srv.HandleGrowthMeasurementByID(w, req)
+
+	if w.Code != http.StatusBadRequest {
+		t.Errorf("expected 400, got %d", w.Code)
+	}
+}
+
+// --- HandleWHOData tests ---
+
+func TestHandleWHOData_GET_Success(t *testing.T) {
+	mock := &mockRepository{
+		babyProfile: &BabyProfile{
+			ID:          1,
+			DateOfBirth: time.Now().AddDate(0, -3, 0),
+			Gender:      "male",
+		},
+	}
+	srv := NewServer(mock)
+
+	req := httptest.NewRequest(http.MethodGet, "/api/who-data?metric=weight", nil)
+	w := httptest.NewRecorder()
+	srv.HandleWHOData(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Errorf("expected 200, got %d", w.Code)
+	}
+}
+
+func TestHandleWHOData_MethodNotAllowed(t *testing.T) {
+	mock := &mockRepository{}
+	srv := NewServer(mock)
+
+	req := httptest.NewRequest(http.MethodPost, "/api/who-data", nil)
+	w := httptest.NewRecorder()
+	srv.HandleWHOData(w, req)
+
+	if w.Code != http.StatusMethodNotAllowed {
+		t.Errorf("expected 405, got %d", w.Code)
+	}
+}
+
+// --- HandleBabyProfile tests with extended fields ---
+
+func TestHandleBabyProfile_PUT_WithGenderAndMilkType(t *testing.T) {
+	mock := &mockRepository{}
+	srv := NewServer(mock)
+
+	body := strings.NewReader(`{"date_of_birth":"2025-01-15","name":"Mia","gender":"female","milk_type":"breast"}`)
+	req := httptest.NewRequest(http.MethodPut, "/api/baby", body)
+	w := httptest.NewRecorder()
+	srv.HandleBabyProfile(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Errorf("expected 200, got %d", w.Code)
+	}
+	if mock.babyProfile.Gender != "female" {
+		t.Errorf("expected gender female, got %s", mock.babyProfile.Gender)
+	}
+	if mock.babyProfile.Name != "Mia" {
+		t.Errorf("expected name Mia, got %s", mock.babyProfile.Name)
+	}
+}
+
+func TestHandleBabyProfile_PUT_InvalidGender(t *testing.T) {
+	mock := &mockRepository{}
+	srv := NewServer(mock)
+
+	body := strings.NewReader(`{"date_of_birth":"2025-01-15","gender":"other"}`)
+	req := httptest.NewRequest(http.MethodPut, "/api/baby", body)
+	w := httptest.NewRecorder()
+	srv.HandleBabyProfile(w, req)
+
+	if w.Code != http.StatusBadRequest {
+		t.Errorf("expected 400, got %d", w.Code)
 	}
 }

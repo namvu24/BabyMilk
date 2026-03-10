@@ -289,3 +289,178 @@ type apiError struct {
 func (e *apiError) Error() string {
 	return fmt.Sprintf("Gemini API returned status %d: %s", e.StatusCode, e.Body)
 }
+
+// GeneratePersonalizedInsight generates AI-powered personalized insights for a baby.
+func (g *GeminiClient) GeneratePersonalizedInsight(profile BabyProfile, latestGrowth *GrowthMeasurement, feedingAvgML, sleepAvgMin int) (string, error) {
+	if g.APIKey == "" {
+		return "", fmt.Errorf("GEMINI_API_KEY is not configured")
+	}
+
+	now := time.Now()
+	ageInDays := int(now.Sub(profile.DateOfBirth).Hours() / 24)
+	ageWeeks := ageInDays / 7
+	ageMonths := ageInDays / 30
+
+	gender := profile.Gender
+	if gender == "" {
+		gender = "unknown"
+	}
+	milkType := profile.MilkType
+	if milkType == "" {
+		milkType = "formula"
+	}
+
+	growthInfo := "No growth measurements available."
+	if latestGrowth != nil {
+		growthInfo = fmt.Sprintf("Latest measurement (date: %s): weight %.2f kg, length %.1f cm.",
+			latestGrowth.Date.Format("2006-01-02"), latestGrowth.WeightKg, latestGrowth.LengthCm)
+		if latestGrowth.HeadCircumferenceCm != nil {
+			growthInfo += fmt.Sprintf(" Head circumference: %.1f cm.", *latestGrowth.HeadCircumferenceCm)
+		}
+
+		// Add WHO context
+		wp := CalculateWeightPercentile(gender, ageWeeks, latestGrowth.WeightKg)
+		lp := CalculateLengthPercentile(gender, ageWeeks, latestGrowth.LengthCm)
+		growthInfo += fmt.Sprintf(" Estimated weight percentile: P%d (z-score: %.2f). Estimated length percentile: P%d (z-score: %.2f).",
+			wp.Percentile, wp.ZScore, lp.Percentile, lp.ZScore)
+	}
+
+	prompt := fmt.Sprintf(`You are a pediatric health expert. Analyze the following baby data and provide personalized insights.
+
+Baby Information:
+- Age: %d weeks old (~%d months), born %s
+- Gender: %s
+- Milk type: %s
+- %s
+- Average daily feeding: %d ml (last 7 days)
+- Average daily sleep: %d minutes (last 7 days)
+
+Return ONLY valid JSON (no markdown, no code fences) with this exact structure:
+{
+  "growth_assessment": {
+    "percentile": 50,
+    "status": "on-track|concern|remarkable",
+    "reasoning": "Explanation of growth assessment"
+  },
+  "feeding_analysis": {
+    "daily_avg_ml": %d,
+    "recommended_ml": 800,
+    "milk_type_guidance": "Guidance based on milk type",
+    "recommendations": ["Recommendation 1", "Recommendation 2"]
+  },
+  "sleep_analysis": {
+    "daily_avg_minutes": %d,
+    "recommended_minutes": 840,
+    "pattern_observations": "Observations about sleep patterns"
+  },
+  "activities": [
+    {
+      "name": "Activity name",
+      "icon": "single emoji",
+      "instructions": "How to do this activity",
+      "benefits": "What it develops",
+      "duration": "5-10 minutes",
+      "difficulty": "easy|medium|advanced"
+    }
+  ],
+  "alerts": [
+    {
+      "severity": "info|warning|urgent",
+      "message": "Alert message",
+      "action": "Recommended action"
+    }
+  ],
+  "summary": "Overall assessment paragraph"
+}
+
+Important guidelines:
+- Base growth assessment on WHO standards for the baby's age and gender
+- Set percentile based on actual measurements if available
+- Feeding recommendations should match %s milk type and age
+- Sleep recommendations should be age-appropriate (newborns need 14-17h, 4-11mo need 12-15h, 1-2y need 11-14h)
+- Include 3-5 personalized activities appropriate for the baby's developmental stage
+- Only include alerts if there are genuine concerns (e.g., weight below P3, insufficient feeding)
+- Keep the summary encouraging and supportive
+- This is informational only, not medical advice
+- status should be "on-track" for normal development, "concern" for potential issues, "remarkable" for above-average metrics`,
+		ageWeeks, ageMonths, profile.DateOfBirth.Format("2006-01-02"),
+		gender, milkType, growthInfo,
+		feedingAvgML, sleepAvgMin,
+		feedingAvgML, sleepAvgMin, milkType)
+
+	reqBody := geminiRequest{
+		Contents: []geminiContent{
+			{Parts: []geminiPart{{Text: prompt}}},
+		},
+		GenerationConfig: map[string]interface{}{
+			"temperature":      0.4,
+			"maxOutputTokens":  4096,
+			"responseMimeType": "application/json",
+		},
+	}
+
+	jsonBody, err := json.Marshal(reqBody)
+	if err != nil {
+		return "", fmt.Errorf("failed to marshal request: %w", err)
+	}
+
+	url := fmt.Sprintf("https://generativelanguage.googleapis.com/v1beta/models/%s:generateContent?key=%s", g.Model, g.APIKey)
+
+	log.Printf("Calling Gemini API for personalized insights (model: %s)", g.Model)
+
+	const maxJSONRetries = 2
+	var lastJSONErr error
+
+	for jsonAttempt := 0; jsonAttempt <= maxJSONRetries; jsonAttempt++ {
+		if jsonAttempt > 0 {
+			log.Printf("Retrying Gemini insight call due to invalid JSON (attempt %d/%d): %v", jsonAttempt, maxJSONRetries, lastJSONErr)
+			time.Sleep(time.Duration(jsonAttempt) * time.Second)
+		}
+
+		body, err := g.callWithRetry(url, jsonBody)
+		if err != nil {
+			return "", err
+		}
+
+		var geminiResp geminiResponse
+		if err := json.Unmarshal(body, &geminiResp); err != nil {
+			lastJSONErr = fmt.Errorf("failed to parse Gemini response: %w", err)
+			continue
+		}
+
+		if geminiResp.Error != nil {
+			return "", fmt.Errorf("Gemini API error: %s", geminiResp.Error.Message)
+		}
+
+		if len(geminiResp.Candidates) == 0 || len(geminiResp.Candidates[0].Content.Parts) == 0 {
+			lastJSONErr = fmt.Errorf("Gemini returned empty response")
+			continue
+		}
+
+		text := geminiResp.Candidates[0].Content.Parts[0].Text
+		text = strings.TrimSpace(text)
+		if strings.HasPrefix(text, "```json") {
+			text = strings.TrimPrefix(text, "```json")
+			text = strings.TrimSuffix(text, "```")
+			text = strings.TrimSpace(text)
+		} else if strings.HasPrefix(text, "```") {
+			text = strings.TrimPrefix(text, "```")
+			text = strings.TrimSuffix(text, "```")
+			text = strings.TrimSpace(text)
+		}
+
+		var js json.RawMessage
+		if err := json.Unmarshal([]byte(text), &js); err != nil {
+			n := len(text)
+			if n > 200 {
+				n = 200
+			}
+			lastJSONErr = fmt.Errorf("Gemini returned invalid JSON: %w\nRaw: %s", err, text[:n])
+			continue
+		}
+
+		return text, nil
+	}
+
+	return "", fmt.Errorf("Gemini returned invalid JSON after %d attempts: %w", maxJSONRetries+1, lastJSONErr)
+}

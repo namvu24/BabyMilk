@@ -158,3 +158,160 @@ func TestSleepInput_Validate_EmptyTimes(t *testing.T) {
 		t.Error("expected error for empty times")
 	}
 }
+
+// ═══════════════════════════════════════════════════════════════════════════
+// ── BabyProfileInput validation tests ──
+// ═══════════════════════════════════════════════════════════════════════════
+
+func TestBabyProfileInput_Validate_Valid(t *testing.T) {
+	input := BabyProfileInput{DateOfBirth: "2025-01-15"}
+	if err := input.Validate(); err != nil {
+		t.Errorf("expected no error, got %v", err)
+	}
+}
+
+func TestBabyProfileInput_Validate_WithGender(t *testing.T) {
+	input := BabyProfileInput{DateOfBirth: "2025-01-15", Gender: "male"}
+	if err := input.Validate(); err != nil {
+		t.Errorf("expected no error, got %v", err)
+	}
+	input.Gender = "female"
+	if err := input.Validate(); err != nil {
+		t.Errorf("expected no error for female, got %v", err)
+	}
+}
+
+func TestBabyProfileInput_Validate_InvalidGender(t *testing.T) {
+	input := BabyProfileInput{DateOfBirth: "2025-01-15", Gender: "other"}
+	if err := input.Validate(); err == nil {
+		t.Error("expected error for invalid gender")
+	}
+}
+
+func TestBabyProfileInput_Validate_MilkType(t *testing.T) {
+	for _, mt := range []string{"formula", "breast", "mixed"} {
+		input := BabyProfileInput{DateOfBirth: "2025-01-15", MilkType: mt}
+		if err := input.Validate(); err != nil {
+			t.Errorf("expected no error for milk_type=%s, got %v", mt, err)
+		}
+	}
+}
+
+func TestBabyProfileInput_Validate_InvalidMilkType(t *testing.T) {
+	input := BabyProfileInput{DateOfBirth: "2025-01-15", MilkType: "cow"}
+	if err := input.Validate(); err == nil {
+		t.Error("expected error for invalid milk_type")
+	}
+}
+
+func TestBabyProfileInput_Validate_MissingDOB(t *testing.T) {
+	input := BabyProfileInput{}
+	if err := input.Validate(); err == nil {
+		t.Error("expected error for missing date_of_birth")
+	}
+}
+
+func TestBabyProfileInput_Validate_InvalidDOBFormat(t *testing.T) {
+	input := BabyProfileInput{DateOfBirth: "15-01-2025"}
+	if err := input.Validate(); err == nil {
+		t.Error("expected error for invalid date format")
+	}
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// ── GrowthMeasurementInput validation tests ──
+// ═══════════════════════════════════════════════════════════════════════════
+
+func TestGrowthInput_Validate_Valid(t *testing.T) {
+	input := GrowthMeasurementInput{
+		Date:     "2025-06-15",
+		WeightKg: 5.5,
+		LengthCm: 55.0,
+	}
+	if err := input.Validate(); err != nil {
+		t.Errorf("expected no error, got %v", err)
+	}
+}
+
+func TestGrowthInput_Validate_WithHead(t *testing.T) {
+	head := 37.5
+	input := GrowthMeasurementInput{
+		Date:                "2025-06-15",
+		WeightKg:            5.5,
+		LengthCm:            55.0,
+		HeadCircumferenceCm: &head,
+	}
+	if err := input.Validate(); err != nil {
+		t.Errorf("expected no error, got %v", err)
+	}
+}
+
+func TestGrowthInput_Validate_MissingDate(t *testing.T) {
+	input := GrowthMeasurementInput{WeightKg: 5.5, LengthCm: 55.0}
+	if err := input.Validate(); err == nil {
+		t.Error("expected error for missing date")
+	}
+}
+
+func TestGrowthInput_Validate_InvalidDateFormat(t *testing.T) {
+	input := GrowthMeasurementInput{Date: "15-06-2025", WeightKg: 5.5, LengthCm: 55.0}
+	if err := input.Validate(); err == nil {
+		t.Error("expected error for invalid date format")
+	}
+}
+
+func TestGrowthInput_Validate_WeightTooLow(t *testing.T) {
+	input := GrowthMeasurementInput{Date: "2025-06-15", WeightKg: 0.1, LengthCm: 55.0}
+	if err := input.Validate(); err == nil {
+		t.Error("expected error for weight too low")
+	}
+}
+
+func TestGrowthInput_Validate_WeightTooHigh(t *testing.T) {
+	input := GrowthMeasurementInput{Date: "2025-06-15", WeightKg: 31, LengthCm: 55.0}
+	if err := input.Validate(); err == nil {
+		t.Error("expected error for weight too high")
+	}
+}
+
+func TestGrowthInput_Validate_LengthTooLow(t *testing.T) {
+	input := GrowthMeasurementInput{Date: "2025-06-15", WeightKg: 5.5, LengthCm: 20}
+	if err := input.Validate(); err == nil {
+		t.Error("expected error for length too low")
+	}
+}
+
+func TestGrowthInput_Validate_LengthTooHigh(t *testing.T) {
+	input := GrowthMeasurementInput{Date: "2025-06-15", WeightKg: 5.5, LengthCm: 140}
+	if err := input.Validate(); err == nil {
+		t.Error("expected error for length too high")
+	}
+}
+
+func TestGrowthInput_Validate_HeadTooLow(t *testing.T) {
+	head := 15.0
+	input := GrowthMeasurementInput{Date: "2025-06-15", WeightKg: 5.5, LengthCm: 55.0, HeadCircumferenceCm: &head}
+	if err := input.Validate(); err == nil {
+		t.Error("expected error for head circumference too low")
+	}
+}
+
+func TestGrowthInput_Validate_HeadTooHigh(t *testing.T) {
+	head := 65.0
+	input := GrowthMeasurementInput{Date: "2025-06-15", WeightKg: 5.5, LengthCm: 55.0, HeadCircumferenceCm: &head}
+	if err := input.Validate(); err == nil {
+		t.Error("expected error for head circumference too high")
+	}
+}
+
+func TestGrowthInput_Validate_BoundaryWeight(t *testing.T) {
+	// At boundary: 0.5 and 30 should be valid
+	input := GrowthMeasurementInput{Date: "2025-06-15", WeightKg: 0.5, LengthCm: 50}
+	if err := input.Validate(); err != nil {
+		t.Errorf("expected 0.5 kg to be valid, got %v", err)
+	}
+	input.WeightKg = 30
+	if err := input.Validate(); err != nil {
+		t.Errorf("expected 30 kg to be valid, got %v", err)
+	}
+}
