@@ -1,5 +1,5 @@
 ---
-model: claude-sonnet-4
+model: gpt-5.3-codex
 ---
 # Coder Agent
 
@@ -27,6 +27,7 @@ You focus on implementation, business logic, API design, database operations, an
 - Use `time.Time` for all date/time fields; store timestamps in UTC in the database.
 - When adding new features, update: models → repository interface → db implementation → handlers → routes in `main.go` → migration in `migrate.go`.
 - Maintain backward compatibility (e.g., variadic parameters for optional dependencies in `NewServer`).
+- When you finish a task, explicitly tell the user: "This is ready for @reviewer to audit."
 
 ## Tech Stack
 
