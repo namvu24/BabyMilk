@@ -338,31 +338,24 @@ Baby Information:
 Return ONLY valid JSON (no markdown, no code fences) with this exact structure:
 {
   "growth_assessment": {
-    "percentile": 50,
-    "status": "on-track|concern|remarkable",
-    "reasoning": "Explanation of growth assessment"
+    "status": "on_track|concern|remarkable",
+    "weight_percentile": "e.g. P50 — normal range",
+    "length_percentile": "e.g. P60 — normal range",
+    "assessment": "Detailed explanation of the baby's growth",
+    "recommendation": "Actionable advice for parents"
   },
   "feeding_analysis": {
-    "daily_avg_ml": %d,
-    "recommended_ml": 800,
-    "milk_type_guidance": "Guidance based on milk type",
-    "recommendations": ["Recommendation 1", "Recommendation 2"]
+    "status": "on_track|concern|remarkable",
+    "daily_average": "e.g. %d ml per day (last 7 days)",
+    "assessment": "Analysis of feeding patterns and whether intake is adequate",
+    "recommendation": "Feeding advice based on age and milk type"
   },
   "sleep_analysis": {
-    "daily_avg_minutes": %d,
-    "recommended_minutes": 840,
-    "pattern_observations": "Observations about sleep patterns"
+    "status": "on_track|concern|remarkable",
+    "daily_average": "e.g. %d minutes per day (last 7 days)",
+    "assessment": "Analysis of sleep patterns and whether duration is adequate",
+    "recommendation": "Sleep advice based on age"
   },
-  "activities": [
-    {
-      "name": "Activity name",
-      "icon": "single emoji",
-      "instructions": "How to do this activity",
-      "benefits": "What it develops",
-      "duration": "5-10 minutes",
-      "difficulty": "easy|medium|advanced"
-    }
-  ],
   "alerts": [
     {
       "severity": "info|warning|urgent",
@@ -378,11 +371,10 @@ Important guidelines:
 - Set percentile based on actual measurements if available
 - Feeding recommendations should match %s milk type and age
 - Sleep recommendations should be age-appropriate (newborns need 14-17h, 4-11mo need 12-15h, 1-2y need 11-14h)
-- Include 3-5 personalized activities appropriate for the baby's developmental stage
 - Only include alerts if there are genuine concerns (e.g., weight below P3, insufficient feeding)
 - Keep the summary encouraging and supportive
 - This is informational only, not medical advice
-- status should be "on-track" for normal development, "concern" for potential issues, "remarkable" for above-average metrics`,
+- status should be "on_track" for normal development, "concern" for potential issues, "remarkable" for above-average metrics`,
 		ageWeeks, ageMonths, profile.DateOfBirth.Format("2006-01-02"),
 		gender, milkType, growthInfo,
 		feedingAvgML, sleepAvgMin,

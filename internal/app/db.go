@@ -108,6 +108,9 @@ func (r *PostgresRepository) UpdateFeeding(id int, input FeedingInput) (Feeding,
 		 RETURNING id, amount_ml, start_time, end_time, created_at, updated_at`,
 		input.AmountML, start, end, id,
 	).Scan(&f.ID, &f.AmountML, &f.StartTime, &f.EndTime, &f.CreatedAt, &f.UpdatedAt)
+	if err == sql.ErrNoRows {
+		return Feeding{}, ErrNotFound
+	}
 	return f, err
 }
 
@@ -121,7 +124,7 @@ func (r *PostgresRepository) DeleteFeeding(id int) error {
 		return err
 	}
 	if rows == 0 {
-		return fmt.Errorf("feeding not found")
+		return ErrNotFound
 	}
 	return nil
 }
@@ -254,6 +257,9 @@ func (r *PostgresRepository) UpdateSleep(id int, input SleepInput) (Sleep, error
 		 RETURNING id, start_time, end_time, created_at, updated_at`,
 		start, end, id,
 	).Scan(&s.ID, &s.StartTime, &s.EndTime, &s.CreatedAt, &s.UpdatedAt)
+	if err == sql.ErrNoRows {
+		return Sleep{}, ErrNotFound
+	}
 	return s, err
 }
 
@@ -267,7 +273,7 @@ func (r *PostgresRepository) DeleteSleep(id int) error {
 		return err
 	}
 	if rows == 0 {
-		return fmt.Errorf("sleep not found")
+		return ErrNotFound
 	}
 	return nil
 }
@@ -507,6 +513,9 @@ func (r *PostgresRepository) UpdateGrowthMeasurement(id int, input GrowthMeasure
 		 RETURNING id, date, weight_kg, length_cm, head_circumference_cm, notes, created_at, updated_at`,
 		input.Date, input.WeightKg, input.LengthCm, headCirc, toNullString(input.Notes), id).
 		Scan(&g.ID, &g.Date, &g.WeightKg, &g.LengthCm, &headCirc, &notesScan, &g.CreatedAt, &g.UpdatedAt)
+	if err == sql.ErrNoRows {
+		return GrowthMeasurement{}, ErrNotFound
+	}
 	if err != nil {
 		return GrowthMeasurement{}, err
 	}
@@ -529,7 +538,7 @@ func (r *PostgresRepository) DeleteGrowthMeasurement(id int) error {
 		return err
 	}
 	if rows == 0 {
-		return fmt.Errorf("growth measurement not found")
+		return ErrNotFound
 	}
 	return nil
 }
@@ -626,4 +635,154 @@ func (r *PostgresRepository) GetSleepDailyAvg(days int) (int, error) {
 		return 0, nil
 	}
 	return int(avg.Float64), nil
+}
+
+// ── Diaper methods ──
+
+func (r *PostgresRepository) GetDiapers(dateFilter string, tz string) ([]Diaper, error) {
+	if tz == "" {
+		tz = "UTC"
+	}
+	query := `SELECT id, type, time, created_at, updated_at FROM diapers`
+	var args []interface{}
+	if len(dateFilter) == 7 {
+		query += ` WHERE to_char(time AT TIME ZONE $1, 'YYYY-MM') = $2`
+		args = append(args, tz, dateFilter)
+	} else if len(dateFilter) == 10 {
+		query += ` WHERE (time AT TIME ZONE $1)::date = $2`
+		args = append(args, tz, dateFilter)
+	}
+	query += ` ORDER BY time DESC`
+
+	rows, err := r.DB.Query(query, args...)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var diapers []Diaper
+	for rows.Next() {
+		var d Diaper
+		if err := rows.Scan(&d.ID, &d.Type, &d.Time, &d.CreatedAt, &d.UpdatedAt); err != nil {
+			return nil, err
+		}
+		diapers = append(diapers, d)
+	}
+	return diapers, rows.Err()
+}
+
+func (r *PostgresRepository) CreateDiaper(input DiaperInput) (Diaper, error) {
+	t, _ := time.Parse(time.RFC3339, input.Time)
+	var d Diaper
+	err := r.DB.QueryRow(
+		`INSERT INTO diapers (type, time) VALUES ($1, $2)
+		 RETURNING id, type, time, created_at, updated_at`,
+		input.Type, t,
+	).Scan(&d.ID, &d.Type, &d.Time, &d.CreatedAt, &d.UpdatedAt)
+	return d, err
+}
+
+func (r *PostgresRepository) UpdateDiaper(id int, input DiaperInput) (Diaper, error) {
+	t, _ := time.Parse(time.RFC3339, input.Time)
+	var d Diaper
+	err := r.DB.QueryRow(
+		`UPDATE diapers SET type=$1, time=$2, updated_at=NOW()
+		 WHERE id=$3
+		 RETURNING id, type, time, created_at, updated_at`,
+		input.Type, t, id,
+	).Scan(&d.ID, &d.Type, &d.Time, &d.CreatedAt, &d.UpdatedAt)
+	if err == sql.ErrNoRows {
+		return Diaper{}, ErrNotFound
+	}
+	return d, err
+}
+
+func (r *PostgresRepository) DeleteDiaper(id int) error {
+	result, err := r.DB.Exec(`DELETE FROM diapers WHERE id=$1`, id)
+	if err != nil {
+		return err
+	}
+	rows, err := result.RowsAffected()
+	if err != nil {
+		return err
+	}
+	if rows == 0 {
+		return ErrNotFound
+	}
+	return nil
+}
+
+// ── Bath methods ──
+
+func (r *PostgresRepository) GetBaths(dateFilter string, tz string) ([]Bath, error) {
+	if tz == "" {
+		tz = "UTC"
+	}
+	query := `SELECT id, time, created_at, updated_at FROM baths`
+	var args []interface{}
+	if len(dateFilter) == 7 {
+		query += ` WHERE to_char(time AT TIME ZONE $1, 'YYYY-MM') = $2`
+		args = append(args, tz, dateFilter)
+	} else if len(dateFilter) == 10 {
+		query += ` WHERE (time AT TIME ZONE $1)::date = $2`
+		args = append(args, tz, dateFilter)
+	}
+	query += ` ORDER BY time DESC`
+
+	rows, err := r.DB.Query(query, args...)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var baths []Bath
+	for rows.Next() {
+		var b Bath
+		if err := rows.Scan(&b.ID, &b.Time, &b.CreatedAt, &b.UpdatedAt); err != nil {
+			return nil, err
+		}
+		baths = append(baths, b)
+	}
+	return baths, rows.Err()
+}
+
+func (r *PostgresRepository) CreateBath(input BathInput) (Bath, error) {
+	t, _ := time.Parse(time.RFC3339, input.Time)
+	var b Bath
+	err := r.DB.QueryRow(
+		`INSERT INTO baths (time) VALUES ($1)
+		 RETURNING id, time, created_at, updated_at`,
+		t,
+	).Scan(&b.ID, &b.Time, &b.CreatedAt, &b.UpdatedAt)
+	return b, err
+}
+
+func (r *PostgresRepository) UpdateBath(id int, input BathInput) (Bath, error) {
+	t, _ := time.Parse(time.RFC3339, input.Time)
+	var b Bath
+	err := r.DB.QueryRow(
+		`UPDATE baths SET time=$1, updated_at=NOW()
+		 WHERE id=$2
+		 RETURNING id, time, created_at, updated_at`,
+		t, id,
+	).Scan(&b.ID, &b.Time, &b.CreatedAt, &b.UpdatedAt)
+	if err == sql.ErrNoRows {
+		return Bath{}, ErrNotFound
+	}
+	return b, err
+}
+
+func (r *PostgresRepository) DeleteBath(id int) error {
+	result, err := r.DB.Exec(`DELETE FROM baths WHERE id=$1`, id)
+	if err != nil {
+		return err
+	}
+	rows, err := result.RowsAffected()
+	if err != nil {
+		return err
+	}
+	if rows == 0 {
+		return ErrNotFound
+	}
+	return nil
 }

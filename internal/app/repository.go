@@ -22,6 +22,18 @@ type Repository interface {
 	GetSleepDailyTotals(days int, tz string) ([]DailySleepTotal, error)
 	GetSleepDailyTotalsByMonth(month string, tz string) ([]DailySleepTotal, error)
 
+	// Diaper methods
+	GetDiapers(date string, tz string) ([]Diaper, error)
+	CreateDiaper(input DiaperInput) (Diaper, error)
+	UpdateDiaper(id int, input DiaperInput) (Diaper, error)
+	DeleteDiaper(id int) error
+
+	// Bath methods
+	GetBaths(date string, tz string) ([]Bath, error)
+	CreateBath(input BathInput) (Bath, error)
+	UpdateBath(id int, input BathInput) (Bath, error)
+	DeleteBath(id int) error
+
 	// Baby profile & development methods
 	GetBabyProfile() (*BabyProfile, error)
 	SaveBabyProfile(input BabyProfileInput) (*BabyProfile, error)

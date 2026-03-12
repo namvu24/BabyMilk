@@ -104,5 +104,30 @@ func RunMigrations(db *sql.DB) {
 		log.Fatalf("Failed to run insights_cache migration: %v", err)
 	}
 
+	_, err = db.Exec(`
+		CREATE TABLE IF NOT EXISTS diapers (
+			id         SERIAL PRIMARY KEY,
+			type       VARCHAR(10) NOT NULL,
+			time       TIMESTAMPTZ NOT NULL,
+			created_at TIMESTAMPTZ DEFAULT NOW(),
+			updated_at TIMESTAMPTZ DEFAULT NOW()
+		)
+	`)
+	if err != nil {
+		log.Fatalf("Failed to run diapers migration: %v", err)
+	}
+
+	_, err = db.Exec(`
+		CREATE TABLE IF NOT EXISTS baths (
+			id         SERIAL PRIMARY KEY,
+			time       TIMESTAMPTZ NOT NULL,
+			created_at TIMESTAMPTZ DEFAULT NOW(),
+			updated_at TIMESTAMPTZ DEFAULT NOW()
+		)
+	`)
+	if err != nil {
+		log.Fatalf("Failed to run baths migration: %v", err)
+	}
+
 	log.Println("Database migrations completed")
 }
