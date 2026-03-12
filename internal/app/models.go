@@ -1,9 +1,13 @@
 package app
 
 import (
+	"errors"
 	"fmt"
 	"time"
 )
+
+// ErrNotFound is returned when a requested resource does not exist.
+var ErrNotFound = errors.New("not found")
 
 type Feeding struct {
 	ID        int       `json:"id"`
@@ -159,6 +163,56 @@ func (g *GrowthMeasurementInput) Validate() error {
 	}
 	if g.HeadCircumferenceCm != nil && (*g.HeadCircumferenceCm < 20 || *g.HeadCircumferenceCm > 60) {
 		return fmt.Errorf("head_circumference_cm must be between 20 and 60")
+	}
+	return nil
+}
+
+// ── Diaper models ──
+
+type Diaper struct {
+	ID        int       `json:"id"`
+	Type      string    `json:"type"`
+	Time      time.Time `json:"time"`
+	CreatedAt time.Time `json:"created_at"`
+	UpdatedAt time.Time `json:"updated_at"`
+}
+
+type DiaperInput struct {
+	Type string `json:"type"`
+	Time string `json:"time"`
+}
+
+func (d *DiaperInput) Validate() error {
+	if d.Type == "" {
+		return fmt.Errorf("type is required")
+	}
+	if d.Type != "pee" && d.Type != "poo" && d.Type != "both" {
+		return fmt.Errorf("type must be 'pee', 'poo', or 'both'")
+	}
+	_, err := time.Parse(time.RFC3339, d.Time)
+	if err != nil {
+		return fmt.Errorf("invalid time format, use RFC3339")
+	}
+	return nil
+}
+
+// ── Bath models ──
+
+type Bath struct {
+	ID        int       `json:"id"`
+	Time      time.Time `json:"time"`
+	CreatedAt time.Time `json:"created_at"`
+	UpdatedAt time.Time `json:"updated_at"`
+}
+
+type BathInput struct {
+	Time string `json:"time"`
+}
+
+func (b *BathInput) Validate() error {
+	_, err := time.Parse(time.RFC3339, b.Time)
+	if err != nil {
+		return fmt.Errorf("invalid time format, use RFC3339")
 	}
 	return nil
 }

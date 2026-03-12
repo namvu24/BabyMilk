@@ -31,6 +31,74 @@ h1 {
     box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
 }
 
+/* Diaper theme color */
+.btn-diaper {
+    background-color: #e8596e;
+    border-color: #e8596e;
+    color: #fff;
+}
+.btn-diaper:hover, .btn-diaper:focus, .btn-diaper:active {
+    background-color: #d1455a;
+    border-color: #d1455a;
+    color: #fff;
+}
+.bg-diaper {
+    background-color: #e8596e !important;
+    color: #fff !important;
+}
+
+/* Bath theme color */
+.btn-bath {
+    background-color: #00acc1;
+    border-color: #00acc1;
+    color: #fff;
+}
+.btn-bath:hover, .btn-bath:focus, .btn-bath:active {
+    background-color: #0097a7;
+    border-color: #0097a7;
+    color: #fff;
+}
+.bg-bath {
+    background-color: #00acc1 !important;
+    color: #fff !important;
+}
+
+/* Time-between-events badge */
+.time-gap-row td {
+    padding: 0 !important;
+    border: none !important;
+    background: transparent !important;
+}
+.time-gap-badge {
+    font-size: 0.72rem;
+    color: #888;
+    display: inline-flex;
+    align-items: center;
+    gap: 2px;
+    padding: 1px 8px;
+}
+[data-bs-theme="dark"] .time-gap-badge {
+    color: #aaa;
+}
+
+/* Wonder week status banner */
+.wonder-banner-angry {
+    background: linear-gradient(135deg, #fee2e2 0%, #fecaca 100%);
+    border: 2px solid #f87171;
+}
+.wonder-banner-happy {
+    background: linear-gradient(135deg, #dcfce7 0%, #bbf7d0 100%);
+    border: 2px solid #4ade80;
+}
+[data-bs-theme="dark"] .wonder-banner-angry {
+    background: linear-gradient(135deg, #3b0b0b 0%, #450a0a 100%);
+    border-color: #b91c1c;
+}
+[data-bs-theme="dark"] .wonder-banner-happy {
+    background: linear-gradient(135deg, #052e16 0%, #064e3b 100%);
+    border-color: #16a34a;
+}
+
 /* Sleep theme color */
 .btn-sleep {
     background-color: #c7550a;

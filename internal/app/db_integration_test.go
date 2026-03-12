@@ -4,6 +4,7 @@ package app
 
 import (
 	"database/sql"
+	"errors"
 	"fmt"
 	"log"
 	"os"
@@ -161,8 +162,8 @@ func TestDeleteFeeding_NotFound_Integration(t *testing.T) {
 	if err == nil {
 		t.Error("expected error for non-existent feeding")
 	}
-	if err.Error() != "feeding not found" {
-		t.Errorf("expected 'feeding not found', got '%s'", err.Error())
+	if !errors.Is(err, ErrNotFound) {
+		t.Errorf("expected ErrNotFound, got %v", err)
 	}
 }
 

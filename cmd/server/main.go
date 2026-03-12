@@ -45,6 +45,14 @@ func main() {
 	mux.HandleFunc("/api/sleeps/", srv.HandleSleepByID)
 	mux.HandleFunc("/api/sleeps", srv.HandleSleeps)
 
+	// API routes — Diapers
+	mux.HandleFunc("/api/diapers/", srv.HandleDiaperByID)
+	mux.HandleFunc("/api/diapers", srv.HandleDiapers)
+
+	// API routes — Baths
+	mux.HandleFunc("/api/baths/", srv.HandleBathByID)
+	mux.HandleFunc("/api/baths", srv.HandleBaths)
+
 	// API routes — Baby profile & Development
 	mux.HandleFunc("/api/baby", srv.HandleBabyProfile)
 	mux.HandleFunc("/api/development", srv.HandleDevelopment)
@@ -62,10 +70,21 @@ func main() {
 		port = "8080"
 	}
 
-	handler := corsMiddleware(mux)
+	handler := corsMiddleware(maxBodyMiddleware(mux))
 
 	log.Printf("BabyMilk server starting on http://localhost:%s", port)
 	log.Fatal(http.ListenAndServe(":"+port, handler))
+}
+
+// maxBodyMiddleware limits request body size for POST/PUT requests to prevent
+// memory exhaustion from oversized payloads.
+func maxBodyMiddleware(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == http.MethodPost || r.Method == http.MethodPut {
+			r.Body = http.MaxBytesReader(w, r.Body, 1<<20) // 1 MB
+		}
+		next.ServeHTTP(w, r)
+	})
 }
 
 func corsMiddleware(next http.Handler) http.Handler {

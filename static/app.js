@@ -1,6 +1,8 @@
 // ── Global state ──
 const API = '/api/feedings';
 const SLEEP_API = '/api/sleeps';
+const DIAPER_API = '/api/diapers';
+const BATH_API = '/api/baths';
 const TZ = Intl.DateTimeFormat().resolvedOptions().timeZone; // e.g. "Asia/Ho_Chi_Minh"
 
 // ── Logger ──
@@ -214,6 +216,75 @@ document.addEventListener('DOMContentLoaded', () => {
         loadEvents();
     });
 
+    // ── Diaper tab initialisation ──
+    setDiaperDefaultTimes();
+    document.getElementById('diaperMonthFilter').value = ym;
+    document.getElementById('diaperForm').addEventListener('submit', handleDiaperSubmit);
+    document.getElementById('diaper-tab').addEventListener('shown.bs.tab', () => {
+        loadDiapers();
+    });
+    // Snap diaper time input to nearest 5 minutes
+    document.getElementById('diaperTime').addEventListener('change', (e) => {
+        const val = e.target.value;
+        if (val) {
+            const [h, m] = val.split(':').map(Number);
+            const rounded = Math.round(m / 5) * 5;
+            const hrs = rounded === 60 ? (h + 1) % 24 : h;
+            const mins = rounded === 60 ? 0 : rounded;
+            e.target.value = `${String(hrs).padStart(2, '0')}:${String(mins).padStart(2, '0')}`;
+        }
+    });
+    // Event delegation for diaper delete buttons
+    document.getElementById('diapersByDay').addEventListener('click', (e) => {
+        const editBtn = e.target.closest('[data-diaper-edit-id]');
+        if (editBtn) {
+            editDiaper(
+                parseInt(editBtn.dataset.diaperEditId),
+                editBtn.dataset.type,
+                decodeURIComponent(editBtn.dataset.time)
+            );
+            return;
+        }
+        const deleteBtn = e.target.closest('[data-diaper-delete-id]');
+        if (deleteBtn) {
+            deleteDiaper(parseInt(deleteBtn.dataset.diaperDeleteId));
+        }
+    });
+
+    // ── Bath tab initialisation ──
+    setBathDefaultTimes();
+    document.getElementById('bathMonthFilter').value = ym;
+    document.getElementById('bathForm').addEventListener('submit', handleBathSubmit);
+    document.getElementById('bath-tab').addEventListener('shown.bs.tab', () => {
+        loadBaths();
+    });
+    // Snap bath time input to nearest 5 minutes
+    document.getElementById('bathTime').addEventListener('change', (e) => {
+        const val = e.target.value;
+        if (val) {
+            const [h, m] = val.split(':').map(Number);
+            const rounded = Math.round(m / 5) * 5;
+            const hrs = rounded === 60 ? (h + 1) % 24 : h;
+            const mins = rounded === 60 ? 0 : rounded;
+            e.target.value = `${String(hrs).padStart(2, '0')}:${String(mins).padStart(2, '0')}`;
+        }
+    });
+    // Event delegation for bath delete buttons
+    document.getElementById('bathsByDay').addEventListener('click', (e) => {
+        const editBtn = e.target.closest('[data-bath-edit-id]');
+        if (editBtn) {
+            editBath(
+                parseInt(editBtn.dataset.bathEditId),
+                decodeURIComponent(editBtn.dataset.time)
+            );
+            return;
+        }
+        const deleteBtn = e.target.closest('[data-bath-delete-id]');
+        if (deleteBtn) {
+            deleteBath(parseInt(deleteBtn.dataset.bathDeleteId));
+        }
+    });
+
     // ── Development tab initialisation ──
     document.getElementById('dev-tab').addEventListener('shown.bs.tab', () => {
         initDevelopmentTab();
@@ -311,16 +382,22 @@ function renderFeedings(feedings) {
     container.innerHTML = days.map(day => {
         const items = groups[day];
         const dayTotal = items.reduce((s, f) => s + f.amount_ml, 0);
-        const rows = items.map(f => {
+        const rows = items.map((f, idx) => {
             const startISO = encodeURIComponent(f.start_time);
             const endISO = encodeURIComponent(f.end_time);
-            return `
+            let gapHtml = '';
+            if (idx > 0) {
+                const prevEnd = new Date(items[idx - 1].end_time);
+                const currStart = new Date(f.start_time);
+                gapHtml = buildTimeGapRow(prevEnd, currStart, 3);
+            }
+            return `${gapHtml}
             <tr class="feeding-row">
                 <td class="text-nowrap">${formatTime(f.start_time)} – ${formatTime(f.end_time)}</td>
                 <td><span class="badge bg-primary rounded-pill">${f.amount_ml} ml</span></td>
                 <td class="text-end text-nowrap">
-                    <button class="btn btn-sm btn-outline-primary py-0 px-2" data-edit-id="${f.id}" data-amount="${f.amount_ml}" data-start="${startISO}" data-end="${endISO}">✏️</button>
-                    <button class="btn btn-sm btn-outline-danger py-0 px-2" data-delete-id="${f.id}">🗑</button>
+                    <button class="btn btn-sm btn-outline-primary py-0 px-2" data-edit-id="${Number(f.id)}" data-amount="${Number(f.amount_ml)}" data-start="${startISO}" data-end="${endISO}">✏️</button>
+                    <button class="btn btn-sm btn-outline-danger py-0 px-2" data-delete-id="${Number(f.id)}">🗑</button>
                 </td>
             </tr>
         `}).join('');
@@ -644,16 +721,22 @@ function renderSleeps(sleeps) {
             ? `${Math.floor(dayTotalMin / 60)}h ${dayTotalMin % 60}m`
             : `${dayTotalMin}m`;
 
-        const rows = items.map(s => {
+        const rows = items.map((s, idx) => {
             const startISO = encodeURIComponent(s.start_time);
             const endISO = encodeURIComponent(s.end_time);
-            return `
+            let gapHtml = '';
+            if (idx > 0) {
+                const prevEnd = new Date(items[idx - 1].end_time);
+                const currStart = new Date(s.start_time);
+                gapHtml = buildTimeGapRow(prevEnd, currStart, 3);
+            }
+            return `${gapHtml}
             <tr class="feeding-row">
                 <td class="text-nowrap">${formatTime(s.start_time)} – ${formatTime(s.end_time)}</td>
                 <td><span class="badge bg-sleep rounded-pill">${formatDuration(s.start_time, s.end_time)}</span></td>
                 <td class="text-end text-nowrap">
-                    <button class="btn btn-sm btn-outline-primary py-0 px-2" data-sleep-edit-id="${s.id}" data-start="${startISO}" data-end="${endISO}">✏️</button>
-                    <button class="btn btn-sm btn-outline-danger py-0 px-2" data-sleep-delete-id="${s.id}">🗑</button>
+                    <button class="btn btn-sm btn-outline-primary py-0 px-2" data-sleep-edit-id="${Number(s.id)}" data-start="${startISO}" data-end="${endISO}">✏️</button>
+                    <button class="btn btn-sm btn-outline-danger py-0 px-2" data-sleep-delete-id="${Number(s.id)}">🗑</button>
                 </td>
             </tr>`;
         }).join('');
@@ -834,19 +917,23 @@ async function loadEvents() {
     const tzParam = `tz=${encodeURIComponent(TZ)}`;
 
     try {
-        const [feedRes, sleepRes] = await Promise.all([
+        const [feedRes, sleepRes, diaperRes, bathRes] = await Promise.all([
             fetch(`${API}?date=${date}&${tzParam}`),
             fetch(`${SLEEP_API}?date=${date}&${tzParam}`),
+            fetch(`${DIAPER_API}?date=${date}&${tzParam}`).catch(() => ({ json: () => [] })),
+            fetch(`${BATH_API}?date=${date}&${tzParam}`).catch(() => ({ json: () => [] })),
         ]);
         const feedings = await feedRes.json();
         const sleeps = await sleepRes.json();
-        renderEvents(feedings, sleeps, date);
+        const diapers = await diaperRes.json();
+        const baths = await bathRes.json();
+        renderEvents(feedings, sleeps, diapers, baths, date);
     } catch (err) {
         log.error('Failed to load events:', err);
     }
 }
 
-function renderEvents(feedings, sleeps, date) {
+function renderEvents(feedings, sleeps, diapers, baths, date) {
     const container = document.getElementById('eventsList');
 
     // Build unified event list
@@ -873,6 +960,30 @@ function renderEvents(feedings, sleeps, date) {
             });
         });
     }
+    if (diapers) {
+        diapers.forEach(d => {
+            const typeIcon = d.type === 'pee' ? '💧' : d.type === 'poo' ? '💩' : '💧💩';
+            const typeLabel = d.type === 'both' ? 'Pee + Poo' : d.type.charAt(0).toUpperCase() + d.type.slice(1);
+            events.push({
+                type: 'diaper',
+                startTime: d.time,
+                endTime: d.time,
+                detail: `${typeIcon} ${typeLabel}`,
+                badgeClass: 'bg-diaper',
+            });
+        });
+    }
+    if (baths) {
+        baths.forEach(b => {
+            events.push({
+                type: 'bath',
+                startTime: b.time,
+                endTime: b.time,
+                detail: 'Bath',
+                badgeClass: 'bg-bath',
+            });
+        });
+    }
 
     if (events.length === 0) {
         container.innerHTML = '<p class="text-center text-muted py-3">No events recorded for this date</p>';
@@ -885,13 +996,26 @@ function renderEvents(feedings, sleeps, date) {
     const dayLabel = new Date(date + 'T00:00:00').toLocaleDateString(undefined, { weekday: 'short', year: 'numeric', month: 'short', day: 'numeric' });
     const feedingCount = events.filter(e => e.type === 'feeding').length;
     const sleepCount = events.filter(e => e.type === 'sleep').length;
+    const diaperCount = events.filter(e => e.type === 'diaper').length;
+    const bathCount = events.filter(e => e.type === 'bath').length;
 
-    const rows = events.map(ev => {
-        const icon = ev.type === 'feeding' ? '🍼' : '😴';
-        const label = ev.type === 'feeding' ? 'Feeding' : 'Sleep';
-        return `
+    const rows = events.map((ev, idx) => {
+        const icons = { feeding: '🍼', sleep: '😴', diaper: '🧷', bath: '🛁' };
+        const labels = { feeding: 'Feeding', sleep: 'Sleep', diaper: 'Diaper', bath: 'Bath' };
+        const icon = icons[ev.type] || '📌';
+        const label = labels[ev.type] || ev.type;
+        const timeStr = ev.startTime === ev.endTime
+            ? formatTime(ev.startTime)
+            : `${formatTime(ev.startTime)} – ${formatTime(ev.endTime)}`;
+        let gapHtml = '';
+        if (idx > 0) {
+            const prevEnd = new Date(events[idx - 1].endTime);
+            const currStart = new Date(ev.startTime);
+            gapHtml = buildTimeGapRow(prevEnd, currStart, 3);
+        }
+        return `${gapHtml}
         <tr class="feeding-row">
-            <td class="text-nowrap">${formatTime(ev.startTime)} – ${formatTime(ev.endTime)}</td>
+            <td class="text-nowrap">${timeStr}</td>
             <td>${icon} ${label}</td>
             <td class="text-end"><span class="badge ${ev.badgeClass} rounded-pill">${ev.detail}</span></td>
         </tr>`;
@@ -905,6 +1029,8 @@ function renderEvents(feedings, sleeps, date) {
                     <span>
                         <span class="badge bg-primary rounded-pill">${feedingCount} feeding${feedingCount !== 1 ? 's' : ''}</span>
                         <span class="badge bg-sleep rounded-pill">${sleepCount} sleep${sleepCount !== 1 ? 's' : ''}</span>
+                        ${diaperCount > 0 ? `<span class="badge bg-diaper rounded-pill">${diaperCount} diaper${diaperCount !== 1 ? 's' : ''}</span>` : ''}
+                        ${bathCount > 0 ? `<span class="badge bg-bath rounded-pill">${bathCount} bath${bathCount !== 1 ? 's' : ''}</span>` : ''}
                     </span>
                 </div>
                 <div class="table-responsive border border-top-0 rounded-bottom">
@@ -1024,6 +1150,9 @@ function showBabyInfo() {
     const namePrefix = babyProfile.name ? `${babyProfile.name} — ` : '';
     document.getElementById('babyAgeDisplay').textContent = namePrefix + age.description;
     document.getElementById('babyDobDisplay').textContent = `Born: ${formatDate(babyProfile.date_of_birth)}`;
+
+    // Show wonder week banner placeholder (will be updated after content loads)
+    document.getElementById('wonderWeekBanner').classList.remove('d-none');
 }
 
 function calculateAge(dob) {
@@ -1113,7 +1242,7 @@ function renderDevelopmentWeek(weekData) {
 
     // Handle error weeks
     if (weekData.error) {
-        document.getElementById('behaviorsContent').innerHTML = `<p class="text-muted">${weekData.error}</p>`;
+        document.getElementById('behaviorsContent').innerHTML = `<p class="text-muted">${escapeHtml(weekData.error)}</p>`;
         document.getElementById('milestonesContent').innerHTML = '';
         document.getElementById('wonderWeekContent').innerHTML = '';
         document.getElementById('exercisesContent').innerHTML = '';
@@ -1165,10 +1294,18 @@ function renderMilestones(milestones) {
 
 function renderWonderWeek(wonderWeek, upcoming) {
     const el = document.getElementById('wonderWeekContent');
+    const banner = document.getElementById('wonderWeekBanner');
+    const bannerContent = document.getElementById('wonderWeekBannerContent');
     let html = '';
 
     if (wonderWeek) {
         if (wonderWeek.is_active) {
+            // Update top banner — angry face
+            if (banner && bannerContent) {
+                bannerContent.className = 'd-flex align-items-center gap-2 rounded p-3 wonder-banner-angry';
+                bannerContent.innerHTML = `<span class="fs-2">😠</span><div><strong>Baby is on wonder week</strong><br><small class="text-muted">Leap ${wonderWeek.leap_number || '?'}: ${escapeHtml(wonderWeek.name || '')}</small></div>`;
+                banner.classList.remove('d-none');
+            }
             html += `
                 <div class="alert wonder-week-active mb-3">
                     <h6 class="alert-heading">🌟 Active Wonder Week — Leap ${wonderWeek.leap_number || '?'}</h6>
@@ -1185,6 +1322,12 @@ function renderWonderWeek(wonderWeek, upcoming) {
                 </div>
             `;
         } else {
+            // Update top banner — happy face
+            if (banner && bannerContent) {
+                bannerContent.className = 'd-flex align-items-center gap-2 rounded p-3 wonder-banner-happy';
+                bannerContent.innerHTML = `<span class="fs-2">😊</span><div><strong>Enjoy your easy week!</strong><br><small class="text-muted">No active wonder week right now</small></div>`;
+                banner.classList.remove('d-none');
+            }
             html += `
                 <div class="alert alert-light mb-3">
                     <span class="text-muted">No active wonder week right now. Your baby is in a calm phase! 😊</span>
@@ -1224,7 +1367,7 @@ function renderExercises(exercises) {
             <div class="card exercise-card h-100">
                 <div class="card-body">
                     <div class="d-flex align-items-center mb-2">
-                        <span class="fs-2 me-2">${ex.icon || '🤸'}</span>
+                        <span class="fs-2 me-2">${escapeHtml(ex.icon || '🤸')}</span>
                         <h6 class="mb-0">${escapeHtml(ex.name)}</h6>
                     </div>
                     <p class="mb-2">${escapeHtml(ex.instructions || '')}</p>
@@ -1622,28 +1765,6 @@ function renderInsights(insight) {
         document.getElementById('insightSleepContent').innerHTML = saHtml || '<p class="text-muted">No sleep analysis available.</p>';
     }
 
-    // Activities
-    const acts = insight.activities;
-    if (acts && acts.length > 0) {
-        document.getElementById('insightActivitiesContent').innerHTML = `
-            <div class="row g-3">${acts.map(a => `
-                <div class="col-12 col-md-6">
-                    <div class="card exercise-card h-100">
-                        <div class="card-body">
-                            <div class="d-flex align-items-center mb-2">
-                                <span class="fs-2 me-2">${a.icon || '🤸'}</span>
-                                <h6 class="mb-0">${escapeHtml(a.name)}</h6>
-                            </div>
-                            <p class="mb-2">${escapeHtml(a.description || '')}</p>
-                            ${a.benefit ? `<span class="badge bg-success-subtle text-success-emphasis">💪 ${escapeHtml(a.benefit)}</span>` : ''}
-                        </div>
-                    </div>
-                </div>
-            `).join('')}</div>`;
-    } else {
-        document.getElementById('insightActivitiesContent').innerHTML = '<p class="text-muted">No activities suggested.</p>';
-    }
-
     // Alerts
     const alertsEl = document.getElementById('insightAlerts');
     if (insight.alerts && insight.alerts.length > 0) {
@@ -1658,5 +1779,343 @@ function renderInsights(insight) {
     // Summary
     if (insight.summary) {
         document.getElementById('insightSummary').textContent = insight.summary;
+    }
+}
+
+// ═══════════════════════════════════════════════
+// ██  TIME GAP UTILITY                        ██
+// ═══════════════════════════════════════════════
+
+// Build a table row showing elapsed time between two timestamps
+// colSpan = number of table columns to span
+function buildTimeGapRow(prevEnd, currStart, colSpan) {
+    const diffMs = currStart - prevEnd;
+    if (diffMs <= 0) return '';
+    const totalMin = Math.round(diffMs / 60000);
+    const h = Math.floor(totalMin / 60);
+    const m = totalMin % 60;
+    let label;
+    if (h > 0) label = `${h}h ${m}m`;
+    else label = `${m}m`;
+    return `<tr class="time-gap-row"><td colspan="${colSpan}" class="text-center"><span class="time-gap-badge">↕ ${label}</span></td></tr>`;
+}
+
+// ═══════════════════════════════════════════════
+// ██  DIAPER TRACKING                         ██
+// ═══════════════════════════════════════════════
+
+// ── Diaper form helpers ──
+function setDiaperDefaultTimes() {
+    const now = new Date();
+    document.getElementById('diaperDate').value = toLocalDate(now);
+    document.getElementById('diaperTime').value = toLocalTime(now);
+}
+
+function changeDiaperMonth(delta) {
+    const input = document.getElementById('diaperMonthFilter');
+    const [y, m] = input.value.split('-').map(Number);
+    const d = new Date(y, m - 1 + delta, 1);
+    input.value = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+    loadDiapers();
+}
+
+// ── Load diapers from API ──
+async function loadDiapers() {
+    const monthFilter = document.getElementById('diaperMonthFilter').value;
+    let url = DIAPER_API + `?tz=${encodeURIComponent(TZ)}`;
+    if (monthFilter) url += `&month=${monthFilter}`;
+
+    try {
+        const res = await fetch(url);
+        const diapers = await res.json();
+        renderDiapers(diapers);
+    } catch (err) {
+        log.error('Failed to load diapers:', err);
+    }
+}
+
+// ── Render diapers grouped by day ──
+function renderDiapers(diapers) {
+    const container = document.getElementById('diapersByDay');
+
+    if (!diapers || diapers.length === 0) {
+        container.innerHTML = '<p class="text-center text-muted py-3">No diaper changes recorded</p>';
+        return;
+    }
+
+    const groups = {};
+    diapers.forEach(d => {
+        const day = new Date(d.time).toLocaleDateString(undefined, { weekday: 'short', year: 'numeric', month: 'short', day: 'numeric' });
+        if (!groups[day]) groups[day] = [];
+        groups[day].push(d);
+    });
+
+    const days = Object.keys(groups);
+
+    container.innerHTML = days.map(day => {
+        const items = groups[day];
+        const dayCount = items.length;
+
+        const rows = items.map((d, idx) => {
+            const timeISO = encodeURIComponent(d.time);
+            const typeIcon = d.type === 'pee' ? '💧' : d.type === 'poo' ? '💩' : '💧💩';
+            const safeType = escapeHtml(d.type);
+            const typeLabel = d.type === 'both' ? 'Pee + Poo' : d.type.charAt(0).toUpperCase() + d.type.slice(1);
+            let gapHtml = '';
+            if (idx > 0) {
+                const prevTime = new Date(items[idx - 1].time);
+                const currTime = new Date(d.time);
+                gapHtml = buildTimeGapRow(prevTime, currTime, 3);
+            }
+            return `${gapHtml}
+            <tr class="feeding-row">
+                <td class="text-nowrap">${formatTime(d.time)}</td>
+                <td>${typeIcon} <span class="badge bg-diaper rounded-pill">${escapeHtml(typeLabel)}</span></td>
+                <td class="text-end text-nowrap">
+                    <button class="btn btn-sm btn-outline-primary py-0 px-2" data-diaper-edit-id="${Number(d.id)}" data-type="${safeType}" data-time="${timeISO}">✏️</button>
+                    <button class="btn btn-sm btn-outline-danger py-0 px-2" data-diaper-delete-id="${Number(d.id)}">🗑</button>
+                </td>
+            </tr>`;
+        }).join('');
+
+        return `
+            <div class="mb-3">
+                <div class="d-flex justify-content-between align-items-center bg-light px-3 py-2 rounded-top border">
+                    <strong>${day}</strong>
+                    <span class="badge bg-diaper rounded-pill">${dayCount} change${dayCount !== 1 ? 's' : ''}</span>
+                </div>
+                <div class="table-responsive border border-top-0 rounded-bottom">
+                    <table class="table table-sm table-striped mb-0">
+                        <thead class="table-light">
+                            <tr><th>Time</th><th>Type</th><th class="text-end">Actions</th></tr>
+                        </thead>
+                        <tbody>${rows}</tbody>
+                    </table>
+                </div>
+            </div>`;
+    }).join('');
+}
+
+// ── Diaper form submit ──
+async function handleDiaperSubmit(e) {
+    e.preventDefault();
+    const id = document.getElementById('diaperEditId').value;
+    const date = document.getElementById('diaperDate').value;
+    const typeEl = document.querySelector('input[name="diaperType"]:checked');
+    const data = {
+        time: toRFC3339(date + 'T' + document.getElementById('diaperTime').value),
+        type: typeEl ? typeEl.value : 'pee',
+    };
+
+    try {
+        const url = id ? `${DIAPER_API}/${id}` : DIAPER_API;
+        const method = id ? 'PUT' : 'POST';
+        const res = await fetch(url, {
+            method,
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(data),
+        });
+        if (!res.ok) {
+            const err = await res.json();
+            alert(err.error || 'Failed to save');
+            return;
+        }
+        document.getElementById('diaperForm').reset();
+        setDiaperDefaultTimes();
+        document.getElementById('diaperPee').checked = true;
+        cancelDiaperEdit();
+        showToast(id ? 'Diaper updated' : 'Diaper change added');
+        loadDiapers();
+    } catch (err) {
+        log.error('Failed to save diaper:', err);
+    }
+}
+
+// ── Diaper edit mode ──
+function editDiaper(id, type, timeStr) {
+    document.getElementById('diaperEditId').value = id;
+    const dt = new Date(timeStr);
+    document.getElementById('diaperDate').value = toLocalDate(dt);
+    document.getElementById('diaperTime').value = toLocalTime(dt);
+    const rb = document.querySelector(`input[name="diaperType"][value="${type}"]`);
+    if (rb) rb.checked = true;
+    document.getElementById('diaperFormTitle').textContent = 'Edit Diaper Change';
+    document.getElementById('diaperSubmitBtn').textContent = 'Update';
+    document.getElementById('diaperCancelBtn').classList.remove('d-none');
+    document.getElementById('diaperForm').scrollIntoView({ behavior: 'smooth', block: 'center' });
+}
+
+function cancelDiaperEdit() {
+    document.getElementById('diaperEditId').value = '';
+    document.getElementById('diaperFormTitle').textContent = 'Add Diaper Change';
+    document.getElementById('diaperSubmitBtn').textContent = 'Add';
+    document.getElementById('diaperCancelBtn').classList.add('d-none');
+}
+
+// ── Delete diaper ──
+async function deleteDiaper(id) {
+    if (!confirm('Delete this diaper change?')) return;
+    try {
+        await fetch(`${DIAPER_API}/${id}`, { method: 'DELETE' });
+        showToast('Diaper change deleted');
+        loadDiapers();
+    } catch (err) {
+        log.error('Failed to delete diaper:', err);
+    }
+}
+
+
+// ═══════════════════════════════════════════════
+// ██  BATH TRACKING                           ██
+// ═══════════════════════════════════════════════
+
+// ── Bath form helpers ──
+function setBathDefaultTimes() {
+    const now = new Date();
+    document.getElementById('bathDate').value = toLocalDate(now);
+    document.getElementById('bathTime').value = toLocalTime(now);
+}
+
+function changeBathMonth(delta) {
+    const input = document.getElementById('bathMonthFilter');
+    const [y, m] = input.value.split('-').map(Number);
+    const d = new Date(y, m - 1 + delta, 1);
+    input.value = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+    loadBaths();
+}
+
+// ── Load baths from API ──
+async function loadBaths() {
+    const monthFilter = document.getElementById('bathMonthFilter').value;
+    let url = BATH_API + `?tz=${encodeURIComponent(TZ)}`;
+    if (monthFilter) url += `&month=${monthFilter}`;
+
+    try {
+        const res = await fetch(url);
+        const baths = await res.json();
+        renderBaths(baths);
+    } catch (err) {
+        log.error('Failed to load baths:', err);
+    }
+}
+
+// ── Render baths grouped by day ──
+function renderBaths(baths) {
+    const container = document.getElementById('bathsByDay');
+
+    if (!baths || baths.length === 0) {
+        container.innerHTML = '<p class="text-center text-muted py-3">No baths recorded</p>';
+        return;
+    }
+
+    const groups = {};
+    baths.forEach(b => {
+        const day = new Date(b.time).toLocaleDateString(undefined, { weekday: 'short', year: 'numeric', month: 'short', day: 'numeric' });
+        if (!groups[day]) groups[day] = [];
+        groups[day].push(b);
+    });
+
+    const days = Object.keys(groups);
+
+    container.innerHTML = days.map(day => {
+        const items = groups[day];
+        const dayCount = items.length;
+
+        const rows = items.map((b, idx) => {
+            const timeISO = encodeURIComponent(b.time);
+            let gapHtml = '';
+            if (idx > 0) {
+                const prevTime = new Date(items[idx - 1].time);
+                const currTime = new Date(b.time);
+                gapHtml = buildTimeGapRow(prevTime, currTime, 2);
+            }
+            return `${gapHtml}
+            <tr class="feeding-row">
+                <td class="text-nowrap">🛁 ${formatTime(b.time)}</td>
+                <td class="text-end text-nowrap">
+                    <button class="btn btn-sm btn-outline-primary py-0 px-2" data-bath-edit-id="${Number(b.id)}" data-time="${timeISO}">✏️</button>
+                    <button class="btn btn-sm btn-outline-danger py-0 px-2" data-bath-delete-id="${Number(b.id)}">🗑</button>
+                </td>
+            </tr>`;
+        }).join('');
+
+        return `
+            <div class="mb-3">
+                <div class="d-flex justify-content-between align-items-center bg-light px-3 py-2 rounded-top border">
+                    <strong>${day}</strong>
+                    <span class="badge bg-bath rounded-pill">${dayCount} bath${dayCount !== 1 ? 's' : ''}</span>
+                </div>
+                <div class="table-responsive border border-top-0 rounded-bottom">
+                    <table class="table table-sm table-striped mb-0">
+                        <thead class="table-light">
+                            <tr><th>Time</th><th class="text-end">Actions</th></tr>
+                        </thead>
+                        <tbody>${rows}</tbody>
+                    </table>
+                </div>
+            </div>`;
+    }).join('');
+}
+
+// ── Bath form submit ──
+async function handleBathSubmit(e) {
+    e.preventDefault();
+    const id = document.getElementById('bathEditId').value;
+    const date = document.getElementById('bathDate').value;
+    const data = {
+        time: toRFC3339(date + 'T' + document.getElementById('bathTime').value),
+    };
+
+    try {
+        const url = id ? `${BATH_API}/${id}` : BATH_API;
+        const method = id ? 'PUT' : 'POST';
+        const res = await fetch(url, {
+            method,
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(data),
+        });
+        if (!res.ok) {
+            const err = await res.json();
+            alert(err.error || 'Failed to save');
+            return;
+        }
+        document.getElementById('bathForm').reset();
+        setBathDefaultTimes();
+        cancelBathEdit();
+        showToast(id ? 'Bath updated' : 'Bath added');
+        loadBaths();
+    } catch (err) {
+        log.error('Failed to save bath:', err);
+    }
+}
+
+// ── Bath edit mode ──
+function editBath(id, timeStr) {
+    document.getElementById('bathEditId').value = id;
+    const dt = new Date(timeStr);
+    document.getElementById('bathDate').value = toLocalDate(dt);
+    document.getElementById('bathTime').value = toLocalTime(dt);
+    document.getElementById('bathFormTitle').textContent = 'Edit Bath';
+    document.getElementById('bathSubmitBtn').textContent = 'Update';
+    document.getElementById('bathCancelBtn').classList.remove('d-none');
+    document.getElementById('bathForm').scrollIntoView({ behavior: 'smooth', block: 'center' });
+}
+
+function cancelBathEdit() {
+    document.getElementById('bathEditId').value = '';
+    document.getElementById('bathFormTitle').textContent = 'Add Bath';
+    document.getElementById('bathSubmitBtn').textContent = 'Add';
+    document.getElementById('bathCancelBtn').classList.add('d-none');
+}
+
+// ── Delete bath ──
+async function deleteBath(id) {
+    if (!confirm('Delete this bath?')) return;
+    try {
+        await fetch(`${BATH_API}/${id}`, { method: 'DELETE' });
+        showToast('Bath deleted');
+        loadBaths();
+    } catch (err) {
+        log.error('Failed to delete bath:', err);
     }
 }

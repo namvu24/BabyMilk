@@ -2,6 +2,7 @@ package app
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"log"
 	"net/http"
@@ -32,7 +33,20 @@ func respondJSON(w http.ResponseWriter, status int, data interface{}) {
 }
 
 func respondError(w http.ResponseWriter, status int, msg string) {
+	if status >= 500 {
+		log.Printf("internal error: %s", msg)
+		msg = "internal server error"
+	}
 	respondJSON(w, status, map[string]string{"error": msg})
+}
+
+// validateTimezone returns true if tz is empty or a valid IANA timezone.
+func validateTimezone(tz string) bool {
+	if tz == "" {
+		return true
+	}
+	_, err := time.LoadLocation(tz)
+	return err == nil
 }
 
 func (s *Server) HandleFeedings(w http.ResponseWriter, r *http.Request) {
@@ -70,6 +84,10 @@ func (s *Server) listFeedings(w http.ResponseWriter, r *http.Request) {
 		filter = r.URL.Query().Get("date")
 	}
 	tz := r.URL.Query().Get("tz")
+	if !validateTimezone(tz) {
+		respondError(w, http.StatusBadRequest, "invalid timezone")
+		return
+	}
 	feedings, err := s.Repo.GetFeedings(filter, tz)
 	if err != nil {
 		respondError(w, http.StatusInternalServerError, err.Error())
@@ -112,6 +130,10 @@ func (s *Server) updateFeeding(w http.ResponseWriter, r *http.Request, id int) {
 	}
 	feeding, err := s.Repo.UpdateFeeding(id, input)
 	if err != nil {
+		if errors.Is(err, ErrNotFound) {
+			respondError(w, http.StatusNotFound, "feeding not found")
+			return
+		}
 		respondError(w, http.StatusInternalServerError, err.Error())
 		return
 	}
@@ -121,8 +143,8 @@ func (s *Server) updateFeeding(w http.ResponseWriter, r *http.Request, id int) {
 
 func (s *Server) deleteFeeding(w http.ResponseWriter, r *http.Request, id int) {
 	if err := s.Repo.DeleteFeeding(id); err != nil {
-		if err.Error() == "feeding not found" {
-			respondError(w, http.StatusNotFound, err.Error())
+		if errors.Is(err, ErrNotFound) {
+			respondError(w, http.StatusNotFound, "feeding not found")
 		} else {
 			respondError(w, http.StatusInternalServerError, err.Error())
 		}
@@ -142,6 +164,10 @@ func (s *Server) HandleDailyTotals(w http.ResponseWriter, r *http.Request) {
 	var err error
 
 	tz := r.URL.Query().Get("tz")
+	if !validateTimezone(tz) {
+		respondError(w, http.StatusBadRequest, "invalid timezone")
+		return
+	}
 
 	if month := r.URL.Query().Get("month"); month != "" {
 		totals, err = s.Repo.GetDailyTotalsByMonth(month, tz)
@@ -219,6 +245,10 @@ func (s *Server) listSleeps(w http.ResponseWriter, r *http.Request) {
 		filter = r.URL.Query().Get("date")
 	}
 	tz := r.URL.Query().Get("tz")
+	if !validateTimezone(tz) {
+		respondError(w, http.StatusBadRequest, "invalid timezone")
+		return
+	}
 	sleeps, err := s.Repo.GetSleeps(filter, tz)
 	if err != nil {
 		respondError(w, http.StatusInternalServerError, err.Error())
@@ -261,6 +291,10 @@ func (s *Server) updateSleep(w http.ResponseWriter, r *http.Request, id int) {
 	}
 	sleep, err := s.Repo.UpdateSleep(id, input)
 	if err != nil {
+		if errors.Is(err, ErrNotFound) {
+			respondError(w, http.StatusNotFound, "sleep not found")
+			return
+		}
 		respondError(w, http.StatusInternalServerError, err.Error())
 		return
 	}
@@ -270,8 +304,8 @@ func (s *Server) updateSleep(w http.ResponseWriter, r *http.Request, id int) {
 
 func (s *Server) deleteSleep(w http.ResponseWriter, r *http.Request, id int) {
 	if err := s.Repo.DeleteSleep(id); err != nil {
-		if err.Error() == "sleep not found" {
-			respondError(w, http.StatusNotFound, err.Error())
+		if errors.Is(err, ErrNotFound) {
+			respondError(w, http.StatusNotFound, "sleep not found")
 		} else {
 			respondError(w, http.StatusInternalServerError, err.Error())
 		}
@@ -291,6 +325,10 @@ func (s *Server) HandleSleepDailyTotals(w http.ResponseWriter, r *http.Request) 
 	var err error
 
 	tz := r.URL.Query().Get("tz")
+	if !validateTimezone(tz) {
+		respondError(w, http.StatusBadRequest, "invalid timezone")
+		return
+	}
 
 	if month := r.URL.Query().Get("month"); month != "" {
 		totals, err = s.Repo.GetSleepDailyTotalsByMonth(month, tz)
@@ -537,6 +575,10 @@ func (s *Server) updateGrowthMeasurement(w http.ResponseWriter, r *http.Request,
 	}
 	measurement, err := s.Repo.UpdateGrowthMeasurement(id, input)
 	if err != nil {
+		if errors.Is(err, ErrNotFound) {
+			respondError(w, http.StatusNotFound, "growth measurement not found")
+			return
+		}
 		respondError(w, http.StatusInternalServerError, err.Error())
 		return
 	}
@@ -546,8 +588,8 @@ func (s *Server) updateGrowthMeasurement(w http.ResponseWriter, r *http.Request,
 
 func (s *Server) deleteGrowthMeasurement(w http.ResponseWriter, r *http.Request, id int) {
 	if err := s.Repo.DeleteGrowthMeasurement(id); err != nil {
-		if err.Error() == "growth measurement not found" {
-			respondError(w, http.StatusNotFound, err.Error())
+		if errors.Is(err, ErrNotFound) {
+			respondError(w, http.StatusNotFound, "growth measurement not found")
 		} else {
 			respondError(w, http.StatusInternalServerError, err.Error())
 		}
@@ -686,4 +728,212 @@ func (s *Server) HandleWHOData(w http.ResponseWriter, r *http.Request) {
 	}
 
 	respondJSON(w, http.StatusOK, resp)
+}
+
+// ── Diaper handlers ──
+
+func (s *Server) HandleDiapers(w http.ResponseWriter, r *http.Request) {
+	switch r.Method {
+	case http.MethodGet:
+		s.listDiapers(w, r)
+	case http.MethodPost:
+		s.createDiaper(w, r)
+	default:
+		respondError(w, http.StatusMethodNotAllowed, "method not allowed")
+	}
+}
+
+func (s *Server) HandleDiaperByID(w http.ResponseWriter, r *http.Request) {
+	parts := strings.Split(strings.TrimPrefix(r.URL.Path, "/api/diapers/"), "/")
+	id, err := strconv.Atoi(parts[0])
+	if err != nil {
+		respondError(w, http.StatusBadRequest, "invalid id")
+		return
+	}
+
+	switch r.Method {
+	case http.MethodPut:
+		s.updateDiaper(w, r, id)
+	case http.MethodDelete:
+		s.deleteDiaper(w, r, id)
+	default:
+		respondError(w, http.StatusMethodNotAllowed, "method not allowed")
+	}
+}
+
+func (s *Server) listDiapers(w http.ResponseWriter, r *http.Request) {
+	filter := r.URL.Query().Get("month")
+	if filter == "" {
+		filter = r.URL.Query().Get("date")
+	}
+	tz := r.URL.Query().Get("tz")
+	if !validateTimezone(tz) {
+		respondError(w, http.StatusBadRequest, "invalid timezone")
+		return
+	}
+	diapers, err := s.Repo.GetDiapers(filter, tz)
+	if err != nil {
+		respondError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	if diapers == nil {
+		diapers = []Diaper{}
+	}
+	respondJSON(w, http.StatusOK, diapers)
+}
+
+func (s *Server) createDiaper(w http.ResponseWriter, r *http.Request) {
+	var input DiaperInput
+	if err := json.NewDecoder(r.Body).Decode(&input); err != nil {
+		respondError(w, http.StatusBadRequest, "invalid JSON")
+		return
+	}
+	if err := input.Validate(); err != nil {
+		respondError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	diaper, err := s.Repo.CreateDiaper(input)
+	if err != nil {
+		respondError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	respondJSON(w, http.StatusCreated, diaper)
+}
+
+func (s *Server) updateDiaper(w http.ResponseWriter, r *http.Request, id int) {
+	var input DiaperInput
+	if err := json.NewDecoder(r.Body).Decode(&input); err != nil {
+		respondError(w, http.StatusBadRequest, "invalid JSON")
+		return
+	}
+	if err := input.Validate(); err != nil {
+		respondError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	diaper, err := s.Repo.UpdateDiaper(id, input)
+	if err != nil {
+		if errors.Is(err, ErrNotFound) {
+			respondError(w, http.StatusNotFound, "diaper not found")
+			return
+		}
+		respondError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	respondJSON(w, http.StatusOK, diaper)
+}
+
+func (s *Server) deleteDiaper(w http.ResponseWriter, r *http.Request, id int) {
+	if err := s.Repo.DeleteDiaper(id); err != nil {
+		if errors.Is(err, ErrNotFound) {
+			respondError(w, http.StatusNotFound, "diaper not found")
+		} else {
+			respondError(w, http.StatusInternalServerError, err.Error())
+		}
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
+}
+
+// ── Bath handlers ──
+
+func (s *Server) HandleBaths(w http.ResponseWriter, r *http.Request) {
+	switch r.Method {
+	case http.MethodGet:
+		s.listBaths(w, r)
+	case http.MethodPost:
+		s.createBath(w, r)
+	default:
+		respondError(w, http.StatusMethodNotAllowed, "method not allowed")
+	}
+}
+
+func (s *Server) HandleBathByID(w http.ResponseWriter, r *http.Request) {
+	parts := strings.Split(strings.TrimPrefix(r.URL.Path, "/api/baths/"), "/")
+	id, err := strconv.Atoi(parts[0])
+	if err != nil {
+		respondError(w, http.StatusBadRequest, "invalid id")
+		return
+	}
+
+	switch r.Method {
+	case http.MethodPut:
+		s.updateBath(w, r, id)
+	case http.MethodDelete:
+		s.deleteBath(w, r, id)
+	default:
+		respondError(w, http.StatusMethodNotAllowed, "method not allowed")
+	}
+}
+
+func (s *Server) listBaths(w http.ResponseWriter, r *http.Request) {
+	filter := r.URL.Query().Get("month")
+	if filter == "" {
+		filter = r.URL.Query().Get("date")
+	}
+	tz := r.URL.Query().Get("tz")
+	if !validateTimezone(tz) {
+		respondError(w, http.StatusBadRequest, "invalid timezone")
+		return
+	}
+	baths, err := s.Repo.GetBaths(filter, tz)
+	if err != nil {
+		respondError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	if baths == nil {
+		baths = []Bath{}
+	}
+	respondJSON(w, http.StatusOK, baths)
+}
+
+func (s *Server) createBath(w http.ResponseWriter, r *http.Request) {
+	var input BathInput
+	if err := json.NewDecoder(r.Body).Decode(&input); err != nil {
+		respondError(w, http.StatusBadRequest, "invalid JSON")
+		return
+	}
+	if err := input.Validate(); err != nil {
+		respondError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	bath, err := s.Repo.CreateBath(input)
+	if err != nil {
+		respondError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	respondJSON(w, http.StatusCreated, bath)
+}
+
+func (s *Server) updateBath(w http.ResponseWriter, r *http.Request, id int) {
+	var input BathInput
+	if err := json.NewDecoder(r.Body).Decode(&input); err != nil {
+		respondError(w, http.StatusBadRequest, "invalid JSON")
+		return
+	}
+	if err := input.Validate(); err != nil {
+		respondError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	bath, err := s.Repo.UpdateBath(id, input)
+	if err != nil {
+		if errors.Is(err, ErrNotFound) {
+			respondError(w, http.StatusNotFound, "bath not found")
+			return
+		}
+		respondError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	respondJSON(w, http.StatusOK, bath)
+}
+
+func (s *Server) deleteBath(w http.ResponseWriter, r *http.Request, id int) {
+	if err := s.Repo.DeleteBath(id); err != nil {
+		if errors.Is(err, ErrNotFound) {
+			respondError(w, http.StatusNotFound, "bath not found")
+		} else {
+			respondError(w, http.StatusInternalServerError, err.Error())
+		}
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
 }

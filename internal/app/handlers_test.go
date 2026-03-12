@@ -53,6 +53,22 @@ type mockRepository struct {
 	insightCache    map[string]*InsightCache
 	feedingDailyAvg int
 	sleepDailyAvg   int
+
+	// Diaper mock state
+	diapers        []Diaper
+	diaperGetErr   error
+	diaperCreateErr error
+	diaperUpdateErr error
+	diaperDeleteErr error
+	lastDiaperInput DiaperInput
+
+	// Bath mock state
+	baths          []Bath
+	bathGetErr     error
+	bathCreateErr  error
+	bathUpdateErr  error
+	bathDeleteErr  error
+	lastBathInput  BathInput
 }
 
 func (m *mockRepository) GetFeedings(date string, tz string) ([]Feeding, error) {
@@ -525,8 +541,22 @@ func TestHandleFeedingByID_DELETE_Success(t *testing.T) {
 	}
 }
 
+func TestHandleFeedingByID_PUT_NotFound(t *testing.T) {
+	mock := &mockRepository{updateErr: ErrNotFound}
+	srv := NewServer(mock)
+
+	body := strings.NewReader(validFeedingJSON())
+	req := httptest.NewRequest(http.MethodPut, "/api/feedings/999", body)
+	w := httptest.NewRecorder()
+	srv.HandleFeedingByID(w, req)
+
+	if w.Code != http.StatusNotFound {
+		t.Errorf("expected 404, got %d", w.Code)
+	}
+}
+
 func TestHandleFeedingByID_DELETE_NotFound(t *testing.T) {
-	mock := &mockRepository{deleteErr: fmt.Errorf("feeding not found")}
+	mock := &mockRepository{deleteErr: ErrNotFound}
 	srv := NewServer(mock)
 
 	req := httptest.NewRequest(http.MethodDelete, "/api/feedings/999", nil)
@@ -702,6 +732,21 @@ func TestRespondError(t *testing.T) {
 	json.Unmarshal(w.Body.Bytes(), &result)
 	if result["error"] != "something went wrong" {
 		t.Errorf("expected error message, got %v", result)
+	}
+}
+
+func TestRespondError_500_Sanitized(t *testing.T) {
+	w := httptest.NewRecorder()
+	respondError(w, http.StatusInternalServerError, "pq: connection refused to db at 10.0.0.5")
+
+	if w.Code != http.StatusInternalServerError {
+		t.Errorf("expected 500, got %d", w.Code)
+	}
+
+	var result map[string]string
+	json.Unmarshal(w.Body.Bytes(), &result)
+	if result["error"] != "internal server error" {
+		t.Errorf("expected sanitized message 'internal server error', got %q", result["error"])
 	}
 }
 
@@ -903,8 +948,22 @@ func TestHandleSleepByID_DELETE_Success(t *testing.T) {
 	}
 }
 
+func TestHandleSleepByID_PUT_NotFound(t *testing.T) {
+	mock := &mockRepository{sleepUpdateErr: ErrNotFound}
+	srv := NewServer(mock)
+
+	body := strings.NewReader(validSleepJSON())
+	req := httptest.NewRequest(http.MethodPut, "/api/sleeps/999", body)
+	w := httptest.NewRecorder()
+	srv.HandleSleepByID(w, req)
+
+	if w.Code != http.StatusNotFound {
+		t.Errorf("expected 404, got %d", w.Code)
+	}
+}
+
 func TestHandleSleepByID_DELETE_NotFound(t *testing.T) {
-	mock := &mockRepository{sleepDeleteErr: fmt.Errorf("sleep not found")}
+	mock := &mockRepository{sleepDeleteErr: ErrNotFound}
 	srv := NewServer(mock)
 
 	req := httptest.NewRequest(http.MethodDelete, "/api/sleeps/999", nil)
@@ -1167,6 +1226,46 @@ func TestHandleGrowthMeasurementByID_DELETE_Success(t *testing.T) {
 	}
 }
 
+func TestHandleGrowthMeasurementByID_DELETE_NotFound(t *testing.T) {
+	mock := &mockRepository{growthDeleteErr: ErrNotFound}
+	srv := NewServer(mock)
+
+	req := httptest.NewRequest(http.MethodDelete, "/api/growth/999", nil)
+	w := httptest.NewRecorder()
+	srv.HandleGrowthMeasurementByID(w, req)
+
+	if w.Code != http.StatusNotFound {
+		t.Errorf("expected 404, got %d", w.Code)
+	}
+}
+
+func TestHandleGrowthMeasurementByID_DELETE_RepoError(t *testing.T) {
+	mock := &mockRepository{growthDeleteErr: fmt.Errorf("db error")}
+	srv := NewServer(mock)
+
+	req := httptest.NewRequest(http.MethodDelete, "/api/growth/1", nil)
+	w := httptest.NewRecorder()
+	srv.HandleGrowthMeasurementByID(w, req)
+
+	if w.Code != http.StatusInternalServerError {
+		t.Errorf("expected 500, got %d", w.Code)
+	}
+}
+
+func TestHandleGrowthMeasurementByID_PUT_NotFound(t *testing.T) {
+	mock := &mockRepository{growthUpdateErr: ErrNotFound}
+	srv := NewServer(mock)
+
+	body := strings.NewReader(`{"date":"2025-06-15","weight_kg":5.5,"length_cm":55.0}`)
+	req := httptest.NewRequest(http.MethodPut, "/api/growth/999", body)
+	w := httptest.NewRecorder()
+	srv.HandleGrowthMeasurementByID(w, req)
+
+	if w.Code != http.StatusNotFound {
+		t.Errorf("expected 404, got %d", w.Code)
+	}
+}
+
 func TestHandleGrowthMeasurementByID_DELETE_InvalidID(t *testing.T) {
 	mock := &mockRepository{}
 	srv := NewServer(mock)
@@ -1247,5 +1346,534 @@ func TestHandleBabyProfile_PUT_InvalidGender(t *testing.T) {
 
 	if w.Code != http.StatusBadRequest {
 		t.Errorf("expected 400, got %d", w.Code)
+	}
+}
+
+// ── Diaper mock methods ──
+
+func (m *mockRepository) GetDiapers(date string, tz string) ([]Diaper, error) {
+	m.lastDate = date
+	return m.diapers, m.diaperGetErr
+}
+
+func (m *mockRepository) CreateDiaper(input DiaperInput) (Diaper, error) {
+	m.lastDiaperInput = input
+	if m.diaperCreateErr != nil {
+		return Diaper{}, m.diaperCreateErr
+	}
+	t, _ := time.Parse(time.RFC3339, input.Time)
+	return Diaper{
+		ID:        1,
+		Type:      input.Type,
+		Time:      t,
+		CreatedAt: time.Now(),
+		UpdatedAt: time.Now(),
+	}, nil
+}
+
+func (m *mockRepository) UpdateDiaper(id int, input DiaperInput) (Diaper, error) {
+	m.lastID = id
+	m.lastDiaperInput = input
+	if m.diaperUpdateErr != nil {
+		return Diaper{}, m.diaperUpdateErr
+	}
+	t, _ := time.Parse(time.RFC3339, input.Time)
+	return Diaper{
+		ID:        id,
+		Type:      input.Type,
+		Time:      t,
+		CreatedAt: time.Now(),
+		UpdatedAt: time.Now(),
+	}, nil
+}
+
+func (m *mockRepository) DeleteDiaper(id int) error {
+	m.lastID = id
+	return m.diaperDeleteErr
+}
+
+// ── Bath mock methods ──
+
+func (m *mockRepository) GetBaths(date string, tz string) ([]Bath, error) {
+	m.lastDate = date
+	return m.baths, m.bathGetErr
+}
+
+func (m *mockRepository) CreateBath(input BathInput) (Bath, error) {
+	m.lastBathInput = input
+	if m.bathCreateErr != nil {
+		return Bath{}, m.bathCreateErr
+	}
+	t, _ := time.Parse(time.RFC3339, input.Time)
+	return Bath{
+		ID:        1,
+		Time:      t,
+		CreatedAt: time.Now(),
+		UpdatedAt: time.Now(),
+	}, nil
+}
+
+func (m *mockRepository) UpdateBath(id int, input BathInput) (Bath, error) {
+	m.lastID = id
+	m.lastBathInput = input
+	if m.bathUpdateErr != nil {
+		return Bath{}, m.bathUpdateErr
+	}
+	t, _ := time.Parse(time.RFC3339, input.Time)
+	return Bath{
+		ID:        id,
+		Time:      t,
+		CreatedAt: time.Now(),
+		UpdatedAt: time.Now(),
+	}, nil
+}
+
+func (m *mockRepository) DeleteBath(id int) error {
+	m.lastID = id
+	return m.bathDeleteErr
+}
+
+// --- HandleDiapers tests ---
+
+func TestHandleDiapers_GET_Success(t *testing.T) {
+	mock := &mockRepository{
+		diapers: []Diaper{
+			{ID: 1, Type: "pee", Time: time.Now()},
+			{ID: 2, Type: "poo", Time: time.Now()},
+		},
+	}
+	srv := NewServer(mock)
+
+	req := httptest.NewRequest(http.MethodGet, "/api/diapers", nil)
+	w := httptest.NewRecorder()
+	srv.HandleDiapers(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Errorf("expected 200, got %d", w.Code)
+	}
+	var result []Diaper
+	json.Unmarshal(w.Body.Bytes(), &result)
+	if len(result) != 2 {
+		t.Errorf("expected 2 diapers, got %d", len(result))
+	}
+}
+
+func TestHandleDiapers_GET_EmptyList(t *testing.T) {
+	mock := &mockRepository{}
+	srv := NewServer(mock)
+
+	req := httptest.NewRequest(http.MethodGet, "/api/diapers", nil)
+	w := httptest.NewRecorder()
+	srv.HandleDiapers(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Errorf("expected 200, got %d", w.Code)
+	}
+	var result []Diaper
+	json.Unmarshal(w.Body.Bytes(), &result)
+	if len(result) != 0 {
+		t.Errorf("expected empty array, got %d diapers", len(result))
+	}
+}
+
+func TestHandleDiapers_POST_Success(t *testing.T) {
+	mock := &mockRepository{}
+	srv := NewServer(mock)
+
+	body := strings.NewReader(`{"type":"pee","time":"2025-01-15T10:00:00Z"}`)
+	req := httptest.NewRequest(http.MethodPost, "/api/diapers", body)
+	w := httptest.NewRecorder()
+	srv.HandleDiapers(w, req)
+
+	if w.Code != http.StatusCreated {
+		t.Errorf("expected 201, got %d", w.Code)
+	}
+}
+
+func TestHandleDiapers_POST_InvalidType(t *testing.T) {
+	mock := &mockRepository{}
+	srv := NewServer(mock)
+
+	body := strings.NewReader(`{"type":"invalid","time":"2025-01-15T10:00:00Z"}`)
+	req := httptest.NewRequest(http.MethodPost, "/api/diapers", body)
+	w := httptest.NewRecorder()
+	srv.HandleDiapers(w, req)
+
+	if w.Code != http.StatusBadRequest {
+		t.Errorf("expected 400, got %d", w.Code)
+	}
+}
+
+func TestHandleDiapers_MethodNotAllowed(t *testing.T) {
+	mock := &mockRepository{}
+	srv := NewServer(mock)
+
+	req := httptest.NewRequest(http.MethodPatch, "/api/diapers", nil)
+	w := httptest.NewRecorder()
+	srv.HandleDiapers(w, req)
+
+	if w.Code != http.StatusMethodNotAllowed {
+		t.Errorf("expected 405, got %d", w.Code)
+	}
+}
+
+func TestHandleDiaperByID_PUT_Success(t *testing.T) {
+	mock := &mockRepository{}
+	srv := NewServer(mock)
+
+	body := strings.NewReader(`{"type":"poo","time":"2025-01-15T10:00:00Z"}`)
+	req := httptest.NewRequest(http.MethodPut, "/api/diapers/1", body)
+	w := httptest.NewRecorder()
+	srv.HandleDiaperByID(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Errorf("expected 200, got %d", w.Code)
+	}
+	if mock.lastID != 1 {
+		t.Errorf("expected id 1, got %d", mock.lastID)
+	}
+}
+
+func TestHandleDiaperByID_DELETE_Success(t *testing.T) {
+	mock := &mockRepository{}
+	srv := NewServer(mock)
+
+	req := httptest.NewRequest(http.MethodDelete, "/api/diapers/1", nil)
+	w := httptest.NewRecorder()
+	srv.HandleDiaperByID(w, req)
+
+	if w.Code != http.StatusNoContent {
+		t.Errorf("expected 204, got %d", w.Code)
+	}
+}
+
+func TestHandleDiaperByID_DELETE_NotFound(t *testing.T) {
+	mock := &mockRepository{diaperDeleteErr: ErrNotFound}
+	srv := NewServer(mock)
+
+	req := httptest.NewRequest(http.MethodDelete, "/api/diapers/999", nil)
+	w := httptest.NewRecorder()
+	srv.HandleDiaperByID(w, req)
+
+	if w.Code != http.StatusNotFound {
+		t.Errorf("expected 404, got %d", w.Code)
+	}
+}
+
+func TestHandleDiaperByID_DELETE_RepoError(t *testing.T) {
+	mock := &mockRepository{diaperDeleteErr: fmt.Errorf("db error")}
+	srv := NewServer(mock)
+
+	req := httptest.NewRequest(http.MethodDelete, "/api/diapers/1", nil)
+	w := httptest.NewRecorder()
+	srv.HandleDiaperByID(w, req)
+
+	if w.Code != http.StatusInternalServerError {
+		t.Errorf("expected 500, got %d", w.Code)
+	}
+}
+
+func TestHandleDiaperByID_PUT_NotFound(t *testing.T) {
+	mock := &mockRepository{diaperUpdateErr: ErrNotFound}
+	srv := NewServer(mock)
+
+	body := strings.NewReader(`{"type":"pee","time":"2025-01-15T10:00:00Z"}`)
+	req := httptest.NewRequest(http.MethodPut, "/api/diapers/999", body)
+	w := httptest.NewRecorder()
+	srv.HandleDiaperByID(w, req)
+
+	if w.Code != http.StatusNotFound {
+		t.Errorf("expected 404, got %d", w.Code)
+	}
+}
+
+func TestHandleDiaperByID_PUT_InvalidJSON(t *testing.T) {
+	mock := &mockRepository{}
+	srv := NewServer(mock)
+
+	body := strings.NewReader(`{bad json}`)
+	req := httptest.NewRequest(http.MethodPut, "/api/diapers/1", body)
+	w := httptest.NewRecorder()
+	srv.HandleDiaperByID(w, req)
+
+	if w.Code != http.StatusBadRequest {
+		t.Errorf("expected 400, got %d", w.Code)
+	}
+}
+
+func TestHandleDiaperByID_PUT_ValidationError(t *testing.T) {
+	mock := &mockRepository{}
+	srv := NewServer(mock)
+
+	body := strings.NewReader(`{"type":"invalid","time":"2025-01-15T10:00:00Z"}`)
+	req := httptest.NewRequest(http.MethodPut, "/api/diapers/1", body)
+	w := httptest.NewRecorder()
+	srv.HandleDiaperByID(w, req)
+
+	if w.Code != http.StatusBadRequest {
+		t.Errorf("expected 400, got %d", w.Code)
+	}
+}
+
+func TestHandleDiapers_GET_RepoError(t *testing.T) {
+	mock := &mockRepository{diaperGetErr: fmt.Errorf("db error")}
+	srv := NewServer(mock)
+
+	req := httptest.NewRequest(http.MethodGet, "/api/diapers", nil)
+	w := httptest.NewRecorder()
+	srv.HandleDiapers(w, req)
+
+	if w.Code != http.StatusInternalServerError {
+		t.Errorf("expected 500, got %d", w.Code)
+	}
+}
+
+func TestHandleDiapers_POST_InvalidJSON(t *testing.T) {
+	mock := &mockRepository{}
+	srv := NewServer(mock)
+
+	body := strings.NewReader(`{bad json}`)
+	req := httptest.NewRequest(http.MethodPost, "/api/diapers", body)
+	w := httptest.NewRecorder()
+	srv.HandleDiapers(w, req)
+
+	if w.Code != http.StatusBadRequest {
+		t.Errorf("expected 400, got %d", w.Code)
+	}
+}
+
+func TestHandleDiapers_POST_RepoError(t *testing.T) {
+	mock := &mockRepository{diaperCreateErr: fmt.Errorf("insert failed")}
+	srv := NewServer(mock)
+
+	body := strings.NewReader(`{"type":"pee","time":"2025-01-15T10:00:00Z"}`)
+	req := httptest.NewRequest(http.MethodPost, "/api/diapers", body)
+	w := httptest.NewRecorder()
+	srv.HandleDiapers(w, req)
+
+	if w.Code != http.StatusInternalServerError {
+		t.Errorf("expected 500, got %d", w.Code)
+	}
+}
+
+// --- HandleBaths tests ---
+
+func TestHandleBaths_GET_Success(t *testing.T) {
+	mock := &mockRepository{
+		baths: []Bath{
+			{ID: 1, Time: time.Now()},
+		},
+	}
+	srv := NewServer(mock)
+
+	req := httptest.NewRequest(http.MethodGet, "/api/baths", nil)
+	w := httptest.NewRecorder()
+	srv.HandleBaths(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Errorf("expected 200, got %d", w.Code)
+	}
+	var result []Bath
+	json.Unmarshal(w.Body.Bytes(), &result)
+	if len(result) != 1 {
+		t.Errorf("expected 1 bath, got %d", len(result))
+	}
+}
+
+func TestHandleBaths_GET_EmptyList(t *testing.T) {
+	mock := &mockRepository{}
+	srv := NewServer(mock)
+
+	req := httptest.NewRequest(http.MethodGet, "/api/baths", nil)
+	w := httptest.NewRecorder()
+	srv.HandleBaths(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Errorf("expected 200, got %d", w.Code)
+	}
+	var result []Bath
+	json.Unmarshal(w.Body.Bytes(), &result)
+	if len(result) != 0 {
+		t.Errorf("expected empty array, got %d baths", len(result))
+	}
+}
+
+func TestHandleBaths_POST_Success(t *testing.T) {
+	mock := &mockRepository{}
+	srv := NewServer(mock)
+
+	body := strings.NewReader(`{"time":"2025-01-15T18:00:00Z"}`)
+	req := httptest.NewRequest(http.MethodPost, "/api/baths", body)
+	w := httptest.NewRecorder()
+	srv.HandleBaths(w, req)
+
+	if w.Code != http.StatusCreated {
+		t.Errorf("expected 201, got %d", w.Code)
+	}
+}
+
+func TestHandleBaths_POST_InvalidTime(t *testing.T) {
+	mock := &mockRepository{}
+	srv := NewServer(mock)
+
+	body := strings.NewReader(`{"time":"not-a-date"}`)
+	req := httptest.NewRequest(http.MethodPost, "/api/baths", body)
+	w := httptest.NewRecorder()
+	srv.HandleBaths(w, req)
+
+	if w.Code != http.StatusBadRequest {
+		t.Errorf("expected 400, got %d", w.Code)
+	}
+}
+
+func TestHandleBaths_MethodNotAllowed(t *testing.T) {
+	mock := &mockRepository{}
+	srv := NewServer(mock)
+
+	req := httptest.NewRequest(http.MethodPatch, "/api/baths", nil)
+	w := httptest.NewRecorder()
+	srv.HandleBaths(w, req)
+
+	if w.Code != http.StatusMethodNotAllowed {
+		t.Errorf("expected 405, got %d", w.Code)
+	}
+}
+
+func TestHandleBathByID_PUT_Success(t *testing.T) {
+	mock := &mockRepository{}
+	srv := NewServer(mock)
+
+	body := strings.NewReader(`{"time":"2025-01-15T18:00:00Z"}`)
+	req := httptest.NewRequest(http.MethodPut, "/api/baths/1", body)
+	w := httptest.NewRecorder()
+	srv.HandleBathByID(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Errorf("expected 200, got %d", w.Code)
+	}
+	if mock.lastID != 1 {
+		t.Errorf("expected id 1, got %d", mock.lastID)
+	}
+}
+
+func TestHandleBathByID_DELETE_Success(t *testing.T) {
+	mock := &mockRepository{}
+	srv := NewServer(mock)
+
+	req := httptest.NewRequest(http.MethodDelete, "/api/baths/1", nil)
+	w := httptest.NewRecorder()
+	srv.HandleBathByID(w, req)
+
+	if w.Code != http.StatusNoContent {
+		t.Errorf("expected 204, got %d", w.Code)
+	}
+}
+
+func TestHandleBathByID_DELETE_NotFound(t *testing.T) {
+	mock := &mockRepository{bathDeleteErr: ErrNotFound}
+	srv := NewServer(mock)
+
+	req := httptest.NewRequest(http.MethodDelete, "/api/baths/999", nil)
+	w := httptest.NewRecorder()
+	srv.HandleBathByID(w, req)
+
+	if w.Code != http.StatusNotFound {
+		t.Errorf("expected 404, got %d", w.Code)
+	}
+}
+
+func TestHandleBathByID_DELETE_RepoError(t *testing.T) {
+	mock := &mockRepository{bathDeleteErr: fmt.Errorf("db error")}
+	srv := NewServer(mock)
+
+	req := httptest.NewRequest(http.MethodDelete, "/api/baths/1", nil)
+	w := httptest.NewRecorder()
+	srv.HandleBathByID(w, req)
+
+	if w.Code != http.StatusInternalServerError {
+		t.Errorf("expected 500, got %d", w.Code)
+	}
+}
+
+func TestHandleBathByID_PUT_NotFound(t *testing.T) {
+	mock := &mockRepository{bathUpdateErr: ErrNotFound}
+	srv := NewServer(mock)
+
+	body := strings.NewReader(`{"time":"2025-01-15T18:00:00Z"}`)
+	req := httptest.NewRequest(http.MethodPut, "/api/baths/999", body)
+	w := httptest.NewRecorder()
+	srv.HandleBathByID(w, req)
+
+	if w.Code != http.StatusNotFound {
+		t.Errorf("expected 404, got %d", w.Code)
+	}
+}
+
+func TestHandleBathByID_PUT_InvalidJSON(t *testing.T) {
+	mock := &mockRepository{}
+	srv := NewServer(mock)
+
+	body := strings.NewReader(`{bad json}`)
+	req := httptest.NewRequest(http.MethodPut, "/api/baths/1", body)
+	w := httptest.NewRecorder()
+	srv.HandleBathByID(w, req)
+
+	if w.Code != http.StatusBadRequest {
+		t.Errorf("expected 400, got %d", w.Code)
+	}
+}
+
+func TestHandleBathByID_PUT_ValidationError(t *testing.T) {
+	mock := &mockRepository{}
+	srv := NewServer(mock)
+
+	body := strings.NewReader(`{"time":"not-a-date"}`)
+	req := httptest.NewRequest(http.MethodPut, "/api/baths/1", body)
+	w := httptest.NewRecorder()
+	srv.HandleBathByID(w, req)
+
+	if w.Code != http.StatusBadRequest {
+		t.Errorf("expected 400, got %d", w.Code)
+	}
+}
+
+func TestHandleBaths_GET_RepoError(t *testing.T) {
+	mock := &mockRepository{bathGetErr: fmt.Errorf("db error")}
+	srv := NewServer(mock)
+
+	req := httptest.NewRequest(http.MethodGet, "/api/baths", nil)
+	w := httptest.NewRecorder()
+	srv.HandleBaths(w, req)
+
+	if w.Code != http.StatusInternalServerError {
+		t.Errorf("expected 500, got %d", w.Code)
+	}
+}
+
+func TestHandleBaths_POST_InvalidJSON(t *testing.T) {
+	mock := &mockRepository{}
+	srv := NewServer(mock)
+
+	body := strings.NewReader(`{bad json}`)
+	req := httptest.NewRequest(http.MethodPost, "/api/baths", body)
+	w := httptest.NewRecorder()
+	srv.HandleBaths(w, req)
+
+	if w.Code != http.StatusBadRequest {
+		t.Errorf("expected 400, got %d", w.Code)
+	}
+}
+
+func TestHandleBaths_POST_RepoError(t *testing.T) {
+	mock := &mockRepository{bathCreateErr: fmt.Errorf("insert failed")}
+	srv := NewServer(mock)
+
+	body := strings.NewReader(`{"time":"2025-01-15T18:00:00Z"}`)
+	req := httptest.NewRequest(http.MethodPost, "/api/baths", body)
+	w := httptest.NewRecorder()
+	srv.HandleBaths(w, req)
+
+	if w.Code != http.StatusInternalServerError {
+		t.Errorf("expected 500, got %d", w.Code)
 	}
 }
