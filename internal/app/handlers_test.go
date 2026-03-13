@@ -1960,7 +1960,8 @@ func TestHandleSleepStart_Success(t *testing.T) {
 	mock := &mockRepository{}
 	srv := NewServer(mock)
 
-	body := `{"start_time":"2026-03-13T22:00:00Z","sleep_type":"night"}`
+	pastTime := time.Now().Add(-5 * time.Minute).UTC().Format(time.RFC3339)
+	body := fmt.Sprintf(`{"start_time":"%s","sleep_type":"night"}`, pastTime)
 	req := httptest.NewRequest(http.MethodPost, "/api/sleeps/start", strings.NewReader(body))
 	req.Header.Set("Content-Type", "application/json")
 	w := httptest.NewRecorder()
@@ -1987,7 +1988,8 @@ func TestHandleSleepStart_ConflictWhenActive(t *testing.T) {
 	}
 	srv := NewServer(mock)
 
-	body := `{"start_time":"2026-03-13T23:00:00Z","sleep_type":"nap"}`
+	pastTime := time.Now().Add(-5 * time.Minute).UTC().Format(time.RFC3339)
+	body := fmt.Sprintf(`{"start_time":"%s","sleep_type":"nap"}`, pastTime)
 	req := httptest.NewRequest(http.MethodPost, "/api/sleeps/start", strings.NewReader(body))
 	req.Header.Set("Content-Type", "application/json")
 	w := httptest.NewRecorder()
