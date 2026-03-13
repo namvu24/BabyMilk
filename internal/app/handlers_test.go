@@ -832,10 +832,12 @@ func validSleepJSON() string {
 // --- HandleSleeps tests ---
 
 func TestHandleSleeps_GET_Success(t *testing.T) {
+	et1 := time.Now().Add(time.Hour)
+	et2 := time.Now().Add(2 * time.Hour)
 	mock := &mockRepository{
 		sleeps: []Sleep{
-			{ID: 1, StartTime: time.Now(), EndTime: time.Now().Add(time.Hour)},
-			{ID: 2, StartTime: time.Now(), EndTime: time.Now().Add(2 * time.Hour)},
+			{ID: 1, StartTime: time.Now(), EndTime: &et1, SleepType: "nap", Status: "completed"},
+			{ID: 2, StartTime: time.Now(), EndTime: &et2, SleepType: "night", Status: "completed"},
 		},
 	}
 	srv := NewServer(mock)
@@ -1152,9 +1154,10 @@ func TestHandleSleepDailyTotals_MethodNotAllowed(t *testing.T) {
 // --- HandleLastSleep tests ---
 
 func TestHandleLastSleep_GET_Success(t *testing.T) {
+	et := time.Now().Add(time.Hour)
 	mock := &mockRepository{
 		sleeps: []Sleep{
-			{ID: 1, StartTime: time.Now(), EndTime: time.Now().Add(time.Hour)},
+			{ID: 1, StartTime: time.Now(), EndTime: &et, SleepType: "nap", Status: "completed"},
 		},
 	}
 	srv := NewServer(mock)
