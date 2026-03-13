@@ -2,6 +2,7 @@ package app
 
 import (
 	"testing"
+	"time"
 )
 
 func TestFeedingInput_Validate_Valid(t *testing.T) {
@@ -313,5 +314,146 @@ func TestGrowthInput_Validate_BoundaryWeight(t *testing.T) {
 	input.WeightKg = 30
 	if err := input.Validate(); err != nil {
 		t.Errorf("expected 30 kg to be valid, got %v", err)
+	}
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// ── SleepStartInput validation tests ──
+// ═══════════════════════════════════════════════════════════════════════════
+
+func TestSleepStartInput_Validate_Valid(t *testing.T) {
+	input := SleepStartInput{
+		StartTime: time.Now().Add(-time.Minute).Format(time.RFC3339),
+		SleepType: "nap",
+	}
+	if err := input.Validate(); err != nil {
+		t.Errorf("expected no error, got %v", err)
+	}
+}
+
+func TestSleepStartInput_Validate_DefaultsToNap(t *testing.T) {
+	input := SleepStartInput{
+		StartTime: time.Now().Add(-time.Minute).Format(time.RFC3339),
+	}
+	if err := input.Validate(); err != nil {
+		t.Errorf("expected no error, got %v", err)
+	}
+	if input.SleepType != "nap" {
+		t.Errorf("expected sleep_type='nap', got '%s'", input.SleepType)
+	}
+}
+
+func TestSleepStartInput_Validate_InvalidType(t *testing.T) {
+	input := SleepStartInput{
+		StartTime: time.Now().Add(-time.Minute).Format(time.RFC3339),
+		SleepType: "invalid",
+	}
+	if err := input.Validate(); err == nil {
+		t.Error("expected error for invalid sleep_type")
+	}
+}
+
+func TestSleepStartInput_Validate_FutureStart(t *testing.T) {
+	input := SleepStartInput{
+		StartTime: time.Now().Add(10 * time.Minute).Format(time.RFC3339),
+		SleepType: "nap",
+	}
+	if err := input.Validate(); err == nil {
+		t.Error("expected error for future start_time")
+	}
+}
+
+func TestSleepStartInput_Validate_BadFormat(t *testing.T) {
+	input := SleepStartInput{StartTime: "not-a-date"}
+	if err := input.Validate(); err == nil {
+		t.Error("expected error for bad format")
+	}
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// ── SleepStopInput validation tests ──
+// ═══════════════════════════════════════════════════════════════════════════
+
+func TestSleepStopInput_Validate_Valid(t *testing.T) {
+	input := SleepStopInput{EndTime: time.Now().Add(-time.Minute).Format(time.RFC3339)}
+	if err := input.Validate(); err != nil {
+		t.Errorf("expected no error, got %v", err)
+	}
+}
+
+func TestSleepStopInput_Validate_BadFormat(t *testing.T) {
+	input := SleepStopInput{EndTime: "not-a-date"}
+	if err := input.Validate(); err == nil {
+		t.Error("expected error for bad format")
+	}
+}
+
+func TestSleepStopInput_Validate_FutureEnd(t *testing.T) {
+	input := SleepStopInput{EndTime: time.Now().Add(10 * time.Minute).Format(time.RFC3339)}
+	if err := input.Validate(); err == nil {
+		t.Error("expected error for future end_time")
+	}
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// ── SleepStartTimeInput validation tests ──
+// ═══════════════════════════════════════════════════════════════════════════
+
+func TestSleepStartTimeInput_Validate_Valid(t *testing.T) {
+	input := SleepStartTimeInput{StartTime: time.Now().Add(-time.Minute).Format(time.RFC3339)}
+	if err := input.Validate(); err != nil {
+		t.Errorf("expected no error, got %v", err)
+	}
+}
+
+func TestSleepStartTimeInput_Validate_BadFormat(t *testing.T) {
+	input := SleepStartTimeInput{StartTime: "not-a-date"}
+	if err := input.Validate(); err == nil {
+		t.Error("expected error for bad format")
+	}
+}
+
+func TestSleepStartTimeInput_Validate_FutureStart(t *testing.T) {
+	input := SleepStartTimeInput{StartTime: time.Now().Add(10 * time.Minute).Format(time.RFC3339)}
+	if err := input.Validate(); err == nil {
+		t.Error("expected error for future start_time")
+	}
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// ── SleepInput enhanced validation tests ──
+// ═══════════════════════════════════════════════════════════════════════════
+
+func TestSleepInput_Validate_EndTimeRequired(t *testing.T) {
+	input := SleepInput{
+		StartTime: time.Now().Format(time.RFC3339),
+	}
+	if err := input.Validate(); err == nil {
+		t.Error("expected error for missing end_time")
+	}
+}
+
+func TestSleepInput_Validate_DefaultSleepType(t *testing.T) {
+	now := time.Now()
+	input := SleepInput{
+		StartTime: now.Format(time.RFC3339),
+		EndTime:   now.Add(time.Hour).Format(time.RFC3339),
+	}
+	if err := input.Validate(); err != nil {
+		t.Errorf("expected no error, got %v", err)
+	}
+	if input.SleepType != "nap" {
+		t.Errorf("expected sleep_type='nap', got '%s'", input.SleepType)
+	}
+}
+
+func TestSleepInput_Validate_DurationTooLong(t *testing.T) {
+	now := time.Now()
+	input := SleepInput{
+		StartTime: now.Format(time.RFC3339),
+		EndTime:   now.Add(25 * time.Hour).Format(time.RFC3339),
+	}
+	if err := input.Validate(); err == nil {
+		t.Error("expected error for duration > 24h")
 	}
 }

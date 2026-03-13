@@ -4,6 +4,7 @@ import (
 	"database/sql"
 	"fmt"
 	"os"
+	"strings"
 	"time"
 
 	_ "github.com/lib/pq"
@@ -192,13 +193,13 @@ func (r *PostgresRepository) GetSleeps(dateFilter string, tz string) ([]Sleep, e
 	if tz == "" {
 		tz = "UTC"
 	}
-	query := `SELECT id, start_time, end_time, created_at, updated_at FROM sleeps`
+	query := `SELECT id, start_time, end_time, sleep_type, status, created_at, updated_at FROM sleeps WHERE status = 'completed'`
 	var args []interface{}
 	if len(dateFilter) == 7 {
-		query += ` WHERE to_char(start_time AT TIME ZONE $1, 'YYYY-MM') = $2`
+		query += ` AND to_char(start_time AT TIME ZONE $1, 'YYYY-MM') = $2`
 		args = append(args, tz, dateFilter)
 	} else if len(dateFilter) == 10 {
-		query += ` WHERE (start_time AT TIME ZONE $1)::date = $2`
+		query += ` AND (start_time AT TIME ZONE $1)::date = $2`
 		args = append(args, tz, dateFilter)
 	}
 	query += ` ORDER BY start_time DESC`
@@ -212,8 +213,12 @@ func (r *PostgresRepository) GetSleeps(dateFilter string, tz string) ([]Sleep, e
 	var sleeps []Sleep
 	for rows.Next() {
 		var s Sleep
-		if err := rows.Scan(&s.ID, &s.StartTime, &s.EndTime, &s.CreatedAt, &s.UpdatedAt); err != nil {
+		var endTime sql.NullTime
+		if err := rows.Scan(&s.ID, &s.StartTime, &endTime, &s.SleepType, &s.Status, &s.CreatedAt, &s.UpdatedAt); err != nil {
 			return nil, err
+		}
+		if endTime.Valid {
+			s.EndTime = &endTime.Time
 		}
 		sleeps = append(sleeps, s)
 	}
@@ -222,43 +227,74 @@ func (r *PostgresRepository) GetSleeps(dateFilter string, tz string) ([]Sleep, e
 
 func (r *PostgresRepository) GetLastSleep() (*Sleep, error) {
 	var s Sleep
+	var endTime sql.NullTime
 	err := r.DB.QueryRow(
-		`SELECT id, start_time, end_time, created_at, updated_at
-		 FROM sleeps ORDER BY created_at DESC LIMIT 1`,
-	).Scan(&s.ID, &s.StartTime, &s.EndTime, &s.CreatedAt, &s.UpdatedAt)
+		`SELECT id, start_time, end_time, sleep_type, status, created_at, updated_at
+		 FROM sleeps WHERE status = 'completed' ORDER BY created_at DESC LIMIT 1`,
+	).Scan(&s.ID, &s.StartTime, &endTime, &s.SleepType, &s.Status, &s.CreatedAt, &s.UpdatedAt)
 	if err != nil {
 		if err == sql.ErrNoRows {
 			return nil, nil
 		}
 		return nil, err
 	}
+	if endTime.Valid {
+		s.EndTime = &endTime.Time
+	}
 	return &s, nil
 }
 
 func (r *PostgresRepository) CreateSleep(input SleepInput) (Sleep, error) {
 	start, _ := time.Parse(time.RFC3339, input.StartTime)
-	end, _ := time.Parse(time.RFC3339, input.EndTime)
+	sleepType := input.SleepType
+	if sleepType == "" {
+		sleepType = "nap"
+	}
 	var s Sleep
+	var endTime sql.NullTime
+	if input.EndTime != "" {
+		end, _ := time.Parse(time.RFC3339, input.EndTime)
+		err := r.DB.QueryRow(
+			`INSERT INTO sleeps (start_time, end_time, sleep_type, status) VALUES ($1, $2, $3, 'completed')
+			 RETURNING id, start_time, end_time, sleep_type, status, created_at, updated_at`,
+			start, end, sleepType,
+		).Scan(&s.ID, &s.StartTime, &endTime, &s.SleepType, &s.Status, &s.CreatedAt, &s.UpdatedAt)
+		if endTime.Valid {
+			s.EndTime = &endTime.Time
+		}
+		return s, err
+	}
 	err := r.DB.QueryRow(
-		`INSERT INTO sleeps (start_time, end_time) VALUES ($1, $2)
-		 RETURNING id, start_time, end_time, created_at, updated_at`,
-		start, end,
-	).Scan(&s.ID, &s.StartTime, &s.EndTime, &s.CreatedAt, &s.UpdatedAt)
+		`INSERT INTO sleeps (start_time, sleep_type, status) VALUES ($1, $2, 'active')
+		 RETURNING id, start_time, end_time, sleep_type, status, created_at, updated_at`,
+		start, sleepType,
+	).Scan(&s.ID, &s.StartTime, &endTime, &s.SleepType, &s.Status, &s.CreatedAt, &s.UpdatedAt)
+	if endTime.Valid {
+		s.EndTime = &endTime.Time
+	}
 	return s, err
 }
 
 func (r *PostgresRepository) UpdateSleep(id int, input SleepInput) (Sleep, error) {
 	start, _ := time.Parse(time.RFC3339, input.StartTime)
 	end, _ := time.Parse(time.RFC3339, input.EndTime)
+	sleepType := input.SleepType
+	if sleepType == "" {
+		sleepType = "nap"
+	}
 	var s Sleep
+	var endTime sql.NullTime
 	err := r.DB.QueryRow(
-		`UPDATE sleeps SET start_time=$1, end_time=$2, updated_at=NOW()
-		 WHERE id=$3
-		 RETURNING id, start_time, end_time, created_at, updated_at`,
-		start, end, id,
-	).Scan(&s.ID, &s.StartTime, &s.EndTime, &s.CreatedAt, &s.UpdatedAt)
+		`UPDATE sleeps SET start_time=$1, end_time=$2, sleep_type=$3, status='completed', updated_at=NOW()
+		 WHERE id=$4
+		 RETURNING id, start_time, end_time, sleep_type, status, created_at, updated_at`,
+		start, end, sleepType, id,
+	).Scan(&s.ID, &s.StartTime, &endTime, &s.SleepType, &s.Status, &s.CreatedAt, &s.UpdatedAt)
 	if err == sql.ErrNoRows {
 		return Sleep{}, ErrNotFound
+	}
+	if endTime.Valid {
+		s.EndTime = &endTime.Time
 	}
 	return s, err
 }
@@ -278,6 +314,88 @@ func (r *PostgresRepository) DeleteSleep(id int) error {
 	return nil
 }
 
+func (r *PostgresRepository) GetActiveSleep() (*Sleep, error) {
+	var s Sleep
+	var endTime sql.NullTime
+	err := r.DB.QueryRow(
+		`SELECT id, start_time, end_time, sleep_type, status, created_at, updated_at
+		 FROM sleeps WHERE status = 'active' ORDER BY created_at DESC LIMIT 1`,
+	).Scan(&s.ID, &s.StartTime, &endTime, &s.SleepType, &s.Status, &s.CreatedAt, &s.UpdatedAt)
+	if err != nil {
+		if err == sql.ErrNoRows {
+			return nil, nil
+		}
+		return nil, err
+	}
+	if endTime.Valid {
+		s.EndTime = &endTime.Time
+	}
+	return &s, nil
+}
+
+func (r *PostgresRepository) StartSleep(input SleepStartInput) (Sleep, error) {
+	start, _ := time.Parse(time.RFC3339, input.StartTime)
+	sleepType := input.SleepType
+	if sleepType == "" {
+		sleepType = "nap"
+	}
+	var s Sleep
+	var endTime sql.NullTime
+	err := r.DB.QueryRow(
+		`INSERT INTO sleeps (start_time, sleep_type, status) VALUES ($1, $2, 'active')
+		 RETURNING id, start_time, end_time, sleep_type, status, created_at, updated_at`,
+		start, sleepType,
+	).Scan(&s.ID, &s.StartTime, &endTime, &s.SleepType, &s.Status, &s.CreatedAt, &s.UpdatedAt)
+	if err != nil {
+		if strings.Contains(err.Error(), "idx_sleeps_single_active") {
+			return Sleep{}, fmt.Errorf("%w: an active sleep session already exists", ErrConflict)
+		}
+		return Sleep{}, err
+	}
+	if endTime.Valid {
+		s.EndTime = &endTime.Time
+	}
+	return s, nil
+}
+
+func (r *PostgresRepository) StopSleep(id int, input SleepStopInput) (Sleep, error) {
+	end, _ := time.Parse(time.RFC3339, input.EndTime)
+	var s Sleep
+	var endTime sql.NullTime
+	err := r.DB.QueryRow(
+		`UPDATE sleeps SET end_time=$1, status='completed', updated_at=NOW()
+		 WHERE id=$2 AND status='active'
+		 RETURNING id, start_time, end_time, sleep_type, status, created_at, updated_at`,
+		end, id,
+	).Scan(&s.ID, &s.StartTime, &endTime, &s.SleepType, &s.Status, &s.CreatedAt, &s.UpdatedAt)
+	if err == sql.ErrNoRows {
+		return Sleep{}, ErrNotFound
+	}
+	if endTime.Valid {
+		s.EndTime = &endTime.Time
+	}
+	return s, err
+}
+
+func (r *PostgresRepository) UpdateSleepStartTime(id int, input SleepStartTimeInput) (Sleep, error) {
+	start, _ := time.Parse(time.RFC3339, input.StartTime)
+	var s Sleep
+	var endTime sql.NullTime
+	err := r.DB.QueryRow(
+		`UPDATE sleeps SET start_time=$1, updated_at=NOW()
+		 WHERE id=$2 AND status='active'
+		 RETURNING id, start_time, end_time, sleep_type, status, created_at, updated_at`,
+		start, id,
+	).Scan(&s.ID, &s.StartTime, &endTime, &s.SleepType, &s.Status, &s.CreatedAt, &s.UpdatedAt)
+	if err == sql.ErrNoRows {
+		return Sleep{}, ErrNotFound
+	}
+	if endTime.Valid {
+		s.EndTime = &endTime.Time
+	}
+	return s, err
+}
+
 func (r *PostgresRepository) GetSleepDailyTotals(days int, tz string) ([]DailySleepTotal, error) {
 	if days <= 0 {
 		days = 7
@@ -289,7 +407,8 @@ func (r *PostgresRepository) GetSleepDailyTotals(days int, tz string) ([]DailySl
 		`SELECT (start_time AT TIME ZONE $1)::date AS date,
 		        COALESCE(SUM(EXTRACT(EPOCH FROM (end_time - start_time)) / 60)::int, 0) AS total_minutes
 		 FROM sleeps
-		 WHERE start_time >= NOW() - INTERVAL '1 day' * $2
+		 WHERE status = 'completed' AND end_time IS NOT NULL
+		   AND start_time >= NOW() - INTERVAL '1 day' * $2
 		 GROUP BY (start_time AT TIME ZONE $1)::date
 		 ORDER BY date`, tz, days)
 	if err != nil {
@@ -316,7 +435,8 @@ func (r *PostgresRepository) GetSleepDailyTotalsByMonth(month string, tz string)
 		`SELECT (start_time AT TIME ZONE $1)::date AS date,
 		        COALESCE(SUM(EXTRACT(EPOCH FROM (end_time - start_time)) / 60)::int, 0) AS total_minutes
 		 FROM sleeps
-		 WHERE to_char(start_time AT TIME ZONE $1, 'YYYY-MM') = $2
+		 WHERE status = 'completed' AND end_time IS NOT NULL
+		   AND to_char(start_time AT TIME ZONE $1, 'YYYY-MM') = $2
 		 GROUP BY (start_time AT TIME ZONE $1)::date
 		 ORDER BY date`, tz, month)
 	if err != nil {
@@ -625,7 +745,7 @@ func (r *PostgresRepository) GetSleepDailyAvg(days int) (int, error) {
 		SELECT AVG(daily_total) FROM (
 			SELECT SUM(EXTRACT(EPOCH FROM (end_time - start_time)) / 60)::int AS daily_total
 			FROM sleeps
-			WHERE start_time >= NOW() - INTERVAL '1 day' * $1
+			WHERE status = 'completed' AND end_time IS NOT NULL AND start_time >= NOW() - INTERVAL '1 day' * $1
 			GROUP BY start_time::date
 		) sub`, days).Scan(&avg)
 	if err != nil {

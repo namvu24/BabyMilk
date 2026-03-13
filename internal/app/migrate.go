@@ -34,6 +34,36 @@ func RunMigrations(db *sql.DB) {
 		log.Fatalf("Failed to run sleeps migration: %v", err)
 	}
 
+	// Add new columns to sleeps (idempotent)
+	for _, col := range []struct{ name, def string }{
+		{"sleep_type", "VARCHAR(10) DEFAULT 'nap'"},
+		{"status", "VARCHAR(10) DEFAULT 'completed'"},
+	} {
+		_, err = db.Exec(fmt.Sprintf(
+			`ALTER TABLE sleeps ADD COLUMN IF NOT EXISTS %s %s`, col.name, col.def))
+		if err != nil {
+			log.Fatalf("Failed to add column %s to sleeps: %v", col.name, err)
+		}
+	}
+
+	// Allow end_time to be NULL for active sleep sessions
+	if _, err = db.Exec(`ALTER TABLE sleeps ALTER COLUMN end_time DROP NOT NULL`); err != nil {
+		log.Printf("Warning: failed to alter end_time nullable: %v", err)
+	}
+
+	// Ensure new columns are NOT NULL
+	if _, err = db.Exec(`ALTER TABLE sleeps ALTER COLUMN sleep_type SET NOT NULL`); err != nil {
+		log.Printf("Warning: failed to set sleep_type NOT NULL: %v", err)
+	}
+	if _, err = db.Exec(`ALTER TABLE sleeps ALTER COLUMN status SET NOT NULL`); err != nil {
+		log.Printf("Warning: failed to set status NOT NULL: %v", err)
+	}
+
+	// Prevent multiple active sleep sessions
+	_, _ = db.Exec(`CREATE UNIQUE INDEX IF NOT EXISTS idx_sleeps_single_active ON sleeps (status) WHERE status = 'active'`)
+	_, _ = db.Exec(`CREATE INDEX IF NOT EXISTS idx_sleeps_status ON sleeps (status)`)
+	_, _ = db.Exec(`CREATE INDEX IF NOT EXISTS idx_sleeps_start_time ON sleeps (start_time)`)
+
 	_, err = db.Exec(`
 		CREATE TABLE IF NOT EXISTS baby_profile (
 			id            SERIAL PRIMARY KEY,
