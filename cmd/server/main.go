@@ -40,6 +40,8 @@ func main() {
 	mux.HandleFunc("/api/feedings", srv.HandleFeedings)
 
 	// API routes — Sleeps
+	mux.HandleFunc("/api/sleeps/active", srv.HandleSleepActive)
+	mux.HandleFunc("/api/sleeps/start", srv.HandleSleepStart)
 	mux.HandleFunc("/api/sleeps/daily", srv.HandleSleepDailyTotals)
 	mux.HandleFunc("/api/sleeps/last", srv.HandleLastSleep)
 	mux.HandleFunc("/api/sleeps/", srv.HandleSleepByID)
@@ -80,7 +82,7 @@ func main() {
 // memory exhaustion from oversized payloads.
 func maxBodyMiddleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.Method == http.MethodPost || r.Method == http.MethodPut {
+		if r.Method == http.MethodPost || r.Method == http.MethodPut || r.Method == http.MethodPatch {
 			r.Body = http.MaxBytesReader(w, r.Body, 1<<20) // 1 MB
 		}
 		next.ServeHTTP(w, r)
@@ -91,7 +93,7 @@ func corsMiddleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if strings.HasPrefix(r.URL.Path, "/api/") {
 			w.Header().Set("Access-Control-Allow-Origin", "*")
-			w.Header().Set("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS")
+			w.Header().Set("Access-Control-Allow-Methods", "GET, POST, PUT, PATCH, DELETE, OPTIONS")
 			w.Header().Set("Access-Control-Allow-Headers", "Content-Type")
 			if r.Method == http.MethodOptions {
 				w.WriteHeader(http.StatusNoContent)

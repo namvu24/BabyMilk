@@ -172,20 +172,7 @@ document.addEventListener('DOMContentLoaded', () => {
     loadSleeps();
     loadSleepDailyTotals();
     document.getElementById('sleepForm').addEventListener('submit', handleSleepSubmit);
-
-    // Snap sleep time inputs to nearest 5 minutes
-    ['sleepStartTime', 'sleepEndTime'].forEach(id => {
-        document.getElementById(id).addEventListener('change', (e) => {
-            const val = e.target.value;
-            if (val) {
-                const [h, m] = val.split(':').map(Number);
-                const rounded = Math.round(m / 5) * 5;
-                const hrs = rounded === 60 ? (h + 1) % 24 : h;
-                const mins = rounded === 60 ? 0 : rounded;
-                e.target.value = `${String(hrs).padStart(2, '0')}:${String(mins).padStart(2, '0')}`;
-            }
-        });
-    });
+    restoreSleepSession();
 
     // Event delegation for sleep edit/delete buttons
     document.getElementById('sleepsByDay').addEventListener('click', (e) => {
@@ -194,7 +181,8 @@ document.addEventListener('DOMContentLoaded', () => {
             editSleep(
                 parseInt(editBtn.dataset.sleepEditId),
                 decodeURIComponent(editBtn.dataset.start),
-                decodeURIComponent(editBtn.dataset.end)
+                decodeURIComponent(editBtn.dataset.end),
+                editBtn.dataset.sleepType || 'nap'
             );
             return;
         }
@@ -604,58 +592,178 @@ function renderChart(totals) {
 // ═══════════════════════════════════════════════════════════════════════════
 
 // ── Sleep timer (Start / Stop) ──
-function toggleSleepTimer() {
+async function toggleSleepTimer() {
+    // Debounce: prevent rapid double-clicks
     const btn = document.getElementById('sleepStartStopBtn');
-    const timerEl = document.getElementById('sleepTimerDisplay');
-
+    if (btn.disabled) return;
+    btn.disabled = true;
+    setTimeout(() => { btn.disabled = false; }, 1000);
     if (!sleepStartTime) {
-        // START
-        sleepStartTime = new Date();
-        document.getElementById('sleepDate').value = toLocalDate(sleepStartTime);
-        document.getElementById('sleepStartTime').value = toLocalTime(sleepStartTime);
-        document.getElementById('sleepEndTime').value = toLocalTime(sleepStartTime);
-
-        btn.textContent = '⏹ Stop Sleep';
-        btn.classList.replace('btn-sleep', 'btn-danger');
-        timerEl.classList.remove('d-none');
-
-        const startLabel = toLocalTime(sleepStartTime);
-        sleepTimerInterval = setInterval(() => {
-            const elapsed = Math.floor((Date.now() - sleepStartTime) / 1000);
-            const h = String(Math.floor(elapsed / 3600)).padStart(2, '0');
-            const m = String(Math.floor((elapsed % 3600) / 60)).padStart(2, '0');
-            const s = String(elapsed % 60).padStart(2, '0');
-            timerEl.textContent = `😴 ${startLabel} — ⏱ ${h}:${m}:${s}`;
-        }, 1000);
-    } else {
-        // STOP
+        // START — call POST /api/sleeps/start
         const now = new Date();
-        document.getElementById('sleepEndTime').value = toLocalTime(now);
-
-        clearInterval(sleepTimerInterval);
-        sleepTimerInterval = null;
-        sleepStartTime = null;
-
-        btn.textContent = '😴 Start Sleep';
-        btn.classList.replace('btn-danger', 'btn-sleep');
-        timerEl.classList.add('d-none');
-        timerEl.textContent = '';
-
-        // Auto-submit the sleep entry
-        document.getElementById('sleepForm').requestSubmit();
+        const sleepType = document.querySelector('input[name="sleepType"]:checked')?.value || 'nap';
+        const data = { start_time: now.toISOString(), sleep_type: sleepType };
+        try {
+            const res = await fetch(`${SLEEP_API}/start`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(data),
+            });
+            if (!res.ok) {
+                const err = await res.json();
+                alert(err.error || 'Failed to start sleep');
+                return;
+            }
+            const sleep = await res.json();
+            sleepStartTime = new Date(sleep.start_time);
+            saveSleepToLocalStorage({ id: sleep.id, start_time: sleep.start_time, sleep_type: sleep.sleep_type });
+            setSleepActiveUI(sleep);
+            showToast('Sleep started');
+        } catch (err) {
+            log.error('Failed to start sleep:', err);
+        }
+    } else {
+        // STOP — call POST /api/sleeps/{id}/stop
+        const stored = JSON.parse(localStorage.getItem('activeSleep'));
+        if (!stored || !stored.id) {
+            log.error('No active sleep ID found');
+            clearSleepActiveUI();
+            return;
+        }
+        const now = new Date();
+        try {
+            const res = await fetch(`${SLEEP_API}/${stored.id}/stop`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ end_time: now.toISOString() }),
+            });
+            if (!res.ok) {
+                const err = await res.json();
+                alert(err.error || 'Failed to stop sleep');
+                return;
+            }
+            clearSleepFromLocalStorage();
+            clearSleepActiveUI();
+            showToast('Sleep stopped');
+            loadSleeps();
+            loadSleepDailyTotals();
+        } catch (err) {
+            log.error('Failed to stop sleep:', err);
+        }
     }
 }
 
 // ── Sleep form helpers ──
 function setSleepDefaultTimes() {
     const now = new Date();
-    document.getElementById('sleepDate').value = toLocalDate(now);
-    document.getElementById('sleepStartTime').value = toLocalTime(now);
-    document.getElementById('sleepEndTime').value = toLocalTime(now);
+    document.getElementById('sleepStart').value = toLocalISO(now);
+    document.getElementById('sleepEnd').value = toLocalISO(now);
 }
 
-function setSleepEndTimeFromStart() {
-    document.getElementById('sleepEndTime').value = document.getElementById('sleepStartTime').value;
+// ── Active sleep localStorage helpers ──
+function saveSleepToLocalStorage(sleepData) {
+    localStorage.setItem('activeSleep', JSON.stringify(sleepData));
+}
+
+function clearSleepFromLocalStorage() {
+    localStorage.removeItem('activeSleep');
+}
+
+// ── Restore active sleep on page load ──
+async function restoreSleepSession() {
+    try {
+        // Check server first
+        const res = await fetch(`${SLEEP_API}/active`);
+        const serverSleep = await res.json();
+        const stored = JSON.parse(localStorage.getItem('activeSleep'));
+
+        if (serverSleep && serverSleep.id && serverSleep.status === 'active') {
+            // Server has active sleep — use it as source of truth
+            sleepStartTime = new Date(serverSleep.start_time);
+            saveSleepToLocalStorage({ id: serverSleep.id, start_time: serverSleep.start_time, sleep_type: serverSleep.sleep_type });
+            setSleepActiveUI(serverSleep);
+        } else if (stored && stored.id) {
+            // localStorage has data but server doesn't — stale, clear it
+            clearSleepFromLocalStorage();
+        }
+    } catch (err) {
+        log.debug('No active sleep session:', err);
+    }
+}
+
+// ── Set UI to active-sleep state ──
+function setSleepActiveUI(sleep) {
+    const btn = document.getElementById('sleepStartStopBtn');
+    const timerEl = document.getElementById('sleepTimerDisplay');
+    const editRow = document.getElementById('sleepEditStartRow');
+    const editInput = document.getElementById('sleepActiveStartEdit');
+
+    sleepStartTime = new Date(sleep.start_time);
+
+    btn.textContent = '⏹ Stop Sleep';
+    btn.classList.replace('btn-sleep', 'btn-danger');
+    timerEl.classList.remove('d-none');
+    editRow.classList.remove('d-none');
+    editInput.value = toLocalISO(sleepStartTime);
+
+    // Set the sleep type radio to match
+    const typeRadio = document.querySelector(`input[name="sleepType"][value="${sleep.sleep_type || 'nap'}"]`);
+    if (typeRadio) typeRadio.checked = true;
+
+    const startLabel = toLocalTime(sleepStartTime);
+    clearInterval(sleepTimerInterval);
+    sleepTimerInterval = setInterval(() => {
+        const elapsed = Math.floor((Date.now() - sleepStartTime) / 1000);
+        const h = String(Math.floor(elapsed / 3600)).padStart(2, '0');
+        const m = String(Math.floor((elapsed % 3600) / 60)).padStart(2, '0');
+        const s = String(elapsed % 60).padStart(2, '0');
+        timerEl.textContent = `😴 ${startLabel} — ⏱ ${h}:${m}:${s}`;
+    }, 1000);
+}
+
+// ── Clear active-sleep UI back to idle ──
+function clearSleepActiveUI() {
+    const btn = document.getElementById('sleepStartStopBtn');
+    const timerEl = document.getElementById('sleepTimerDisplay');
+    const editRow = document.getElementById('sleepEditStartRow');
+
+    clearInterval(sleepTimerInterval);
+    sleepTimerInterval = null;
+    sleepStartTime = null;
+
+    btn.textContent = '😴 Start Sleep';
+    btn.classList.replace('btn-danger', 'btn-sleep');
+    timerEl.classList.add('d-none');
+    timerEl.textContent = '';
+    editRow.classList.add('d-none');
+}
+
+// ── Save edited start time for active sleep ──
+async function saveActiveStartTime() {
+    const stored = JSON.parse(localStorage.getItem('activeSleep'));
+    if (!stored || !stored.id) return;
+    const newStart = document.getElementById('sleepActiveStartEdit').value;
+    if (!newStart) return;
+
+    try {
+        const res = await fetch(`${SLEEP_API}/${stored.id}`, {
+            method: 'PATCH',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ start_time: toRFC3339(newStart) }),
+        });
+        if (!res.ok) {
+            const err = await res.json();
+            alert(err.error || 'Failed to update start time');
+            return;
+        }
+        const updated = await res.json();
+        sleepStartTime = new Date(updated.start_time);
+        saveSleepToLocalStorage({ id: updated.id, start_time: updated.start_time, sleep_type: updated.sleep_type });
+        setSleepActiveUI(updated);
+        showToast('Start time updated');
+    } catch (err) {
+        log.error('Failed to edit active sleep start:', err);
+    }
 }
 
 // ── Format duration between two ISO timestamps as "Xh Ym" ──
@@ -713,8 +821,9 @@ function renderSleeps(sleeps) {
 
     container.innerHTML = days.map(day => {
         const items = groups[day];
-        // Sum total minutes for the day
+        // Sum total minutes for the day (only completed sleeps)
         const dayTotalMin = items.reduce((sum, s) => {
+            if (!s.end_time) return sum;
             return sum + Math.round((new Date(s.end_time) - new Date(s.start_time)) / 60000);
         }, 0);
         const dayTotalStr = dayTotalMin >= 60
@@ -723,19 +832,31 @@ function renderSleeps(sleeps) {
 
         const rows = items.map((s, idx) => {
             const startISO = encodeURIComponent(s.start_time);
-            const endISO = encodeURIComponent(s.end_time);
+            const endISO = s.end_time ? encodeURIComponent(s.end_time) : '';
+            const sleepType = s.sleep_type || 'nap';
+            const typeBadge = sleepType === 'night'
+                ? '<span class="badge bg-sleep-night rounded-pill">🌙 Night</span>'
+                : '<span class="badge bg-sleep-nap rounded-pill">💤 Nap</span>';
+            const isActive = s.status === 'active' || !s.end_time;
+            const timeLabel = isActive
+                ? `${formatTime(s.start_time)} – <em>ongoing</em>`
+                : `${formatTime(s.start_time)} – ${formatTime(s.end_time)}`;
+            const durationLabel = isActive
+                ? '<span class="badge bg-warning text-dark rounded-pill">Active</span>'
+                : `<span class="badge bg-sleep rounded-pill">${formatDuration(s.start_time, s.end_time)}</span>`;
             let gapHtml = '';
             if (idx > 0) {
-                const prevEnd = new Date(items[idx - 1].end_time);
+                const prevEnd = items[idx - 1].end_time ? new Date(items[idx - 1].end_time) : new Date(items[idx - 1].start_time);
                 const currStart = new Date(s.start_time);
-                gapHtml = buildTimeGapRow(prevEnd, currStart, 3);
+                gapHtml = buildTimeGapRow(prevEnd, currStart, 4);
             }
             return `${gapHtml}
             <tr class="feeding-row">
-                <td class="text-nowrap">${formatTime(s.start_time)} – ${formatTime(s.end_time)}</td>
-                <td><span class="badge bg-sleep rounded-pill">${formatDuration(s.start_time, s.end_time)}</span></td>
+                <td class="text-nowrap">${timeLabel}</td>
+                <td>${typeBadge}</td>
+                <td>${durationLabel}</td>
                 <td class="text-end text-nowrap">
-                    <button class="btn btn-sm btn-outline-primary py-0 px-2" data-sleep-edit-id="${Number(s.id)}" data-start="${startISO}" data-end="${endISO}">✏️</button>
+                    ${!isActive ? `<button class="btn btn-sm btn-outline-primary py-0 px-2" data-sleep-edit-id="${Number(s.id)}" data-start="${startISO}" data-end="${endISO}" data-sleep-type="${sleepType}">✏️</button>` : ''}
                     <button class="btn btn-sm btn-outline-danger py-0 px-2" data-sleep-delete-id="${Number(s.id)}">🗑</button>
                 </td>
             </tr>`;
@@ -750,7 +871,7 @@ function renderSleeps(sleeps) {
                 <div class="table-responsive border border-top-0 rounded-bottom">
                     <table class="table table-sm table-striped mb-0">
                         <thead class="table-light">
-                            <tr><th>Time</th><th>Duration</th><th class="text-end">Actions</th></tr>
+                            <tr><th>Time</th><th>Type</th><th>Duration</th><th class="text-end">Actions</th></tr>
                         </thead>
                         <tbody>${rows}</tbody>
                     </table>
@@ -763,10 +884,11 @@ function renderSleeps(sleeps) {
 async function handleSleepSubmit(e) {
     e.preventDefault();
     const id = document.getElementById('sleepEditId').value;
-    const date = document.getElementById('sleepDate').value;
+    const sleepType = document.querySelector('input[name="sleepType"]:checked')?.value || 'nap';
     const data = {
-        start_time: toRFC3339(date + 'T' + document.getElementById('sleepStartTime').value),
-        end_time: toRFC3339(date + 'T' + document.getElementById('sleepEndTime').value),
+        start_time: toRFC3339(document.getElementById('sleepStart').value),
+        end_time: toRFC3339(document.getElementById('sleepEnd').value),
+        sleep_type: sleepType,
     };
 
     try {
@@ -794,11 +916,13 @@ async function handleSleepSubmit(e) {
 }
 
 // ── Sleep edit mode ──
-function editSleep(id, startTime, endTime) {
+function editSleep(id, startTime, endTime, sleepType) {
     document.getElementById('sleepEditId').value = id;
-    document.getElementById('sleepDate').value = toLocalDate(new Date(startTime));
-    document.getElementById('sleepStartTime').value = toLocalTime(new Date(startTime));
-    document.getElementById('sleepEndTime').value = toLocalTime(new Date(endTime));
+    document.getElementById('sleepStart').value = toLocalISO(new Date(startTime));
+    document.getElementById('sleepEnd').value = toLocalISO(new Date(endTime));
+    // Set sleep type radio
+    const typeRadio = document.querySelector(`input[name="sleepType"][value="${sleepType || 'nap'}"]`);
+    if (typeRadio) typeRadio.checked = true;
     document.getElementById('sleepFormTitle').textContent = 'Edit Sleep';
     document.getElementById('sleepSubmitBtn').textContent = 'Update';
     document.getElementById('sleepCancelBtn').classList.remove('d-none');
@@ -811,18 +935,37 @@ function cancelSleepEdit() {
     document.getElementById('sleepFormTitle').textContent = 'Add Sleep';
     document.getElementById('sleepSubmitBtn').textContent = 'Add';
     document.getElementById('sleepCancelBtn').classList.add('d-none');
+    // Reset sleep type to default
+    const napRadio = document.getElementById('sleepNap');
+    if (napRadio) napRadio.checked = true;
 }
 
 // ── Delete sleep ──
 async function deleteSleep(id) {
     if (!confirm('Delete this sleep session?')) return;
+    // Clear active session if we're deleting the active sleep
+    const stored = localStorage.getItem('activeSleep');
+    if (stored) {
+        try {
+            const parsed = JSON.parse(stored);
+            if (parsed && parsed.id === id) {
+                clearSleepFromLocalStorage();
+                clearSleepActiveUI();
+            }
+        } catch (_) { /* ignore parse errors */ }
+    }
     try {
-        await fetch(`${SLEEP_API}/${id}`, { method: 'DELETE' });
+        const res = await fetch(`${SLEEP_API}/${id}`, { method: 'DELETE' });
+        if (!res.ok) {
+            showToast('Failed to delete sleep', 'error');
+            return;
+        }
         showToast('Sleep deleted');
         loadSleeps();
         loadSleepDailyTotals();
     } catch (err) {
         log.error('Failed to delete sleep:', err);
+        showToast('Failed to delete sleep', 'error');
     }
 }
 
@@ -951,12 +1094,15 @@ function renderEvents(feedings, sleeps, diapers, baths, date) {
     }
     if (sleeps) {
         sleeps.forEach(s => {
+            const isActive = s.status === 'active' || !s.end_time;
+            const typeLabel = s.sleep_type === 'night' ? 'Night Sleep' : 'Nap';
             events.push({
                 type: 'sleep',
                 startTime: s.start_time,
-                endTime: s.end_time,
-                detail: formatDuration(s.start_time, s.end_time),
-                badgeClass: 'bg-sleep',
+                endTime: s.end_time || s.start_time,
+                detail: isActive ? 'Active' : formatDuration(s.start_time, s.end_time),
+                badgeClass: isActive ? 'bg-warning text-dark' : 'bg-sleep',
+                label: typeLabel,
             });
         });
     }
@@ -1001,9 +1147,9 @@ function renderEvents(feedings, sleeps, diapers, baths, date) {
 
     const rows = events.map((ev, idx) => {
         const icons = { feeding: '🍼', sleep: '😴', diaper: '🧷', bath: '🛁' };
-        const labels = { feeding: 'Feeding', sleep: 'Sleep', diaper: 'Diaper', bath: 'Bath' };
+        const defaultLabels = { feeding: 'Feeding', sleep: 'Sleep', diaper: 'Diaper', bath: 'Bath' };
         const icon = icons[ev.type] || '📌';
-        const label = labels[ev.type] || ev.type;
+        const label = ev.label || defaultLabels[ev.type] || ev.type;
         const timeStr = ev.startTime === ev.endTime
             ? formatTime(ev.startTime)
             : `${formatTime(ev.startTime)} – ${formatTime(ev.endTime)}`;

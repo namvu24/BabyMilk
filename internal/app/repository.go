@@ -19,6 +19,10 @@ type Repository interface {
 	CreateSleep(input SleepInput) (Sleep, error)
 	UpdateSleep(id int, input SleepInput) (Sleep, error)
 	DeleteSleep(id int) error
+	GetActiveSleep() (*Sleep, error)
+	StartSleep(input SleepStartInput) (Sleep, error)
+	StopSleep(id int, input SleepStopInput) (Sleep, error)
+	UpdateSleepStartTime(id int, input SleepStartTimeInput) (Sleep, error)
 	GetSleepDailyTotals(days int, tz string) ([]DailySleepTotal, error)
 	GetSleepDailyTotalsByMonth(month string, tz string) ([]DailySleepTotal, error)
 

@@ -9,6 +9,9 @@ import (
 // ErrNotFound is returned when a requested resource does not exist.
 var ErrNotFound = errors.New("not found")
 
+// ErrConflict is returned when a resource conflict prevents the operation.
+var ErrConflict = errors.New("conflict")
+
 type Feeding struct {
 	ID        int       `json:"id"`
 	AmountML  int       `json:"amount_ml"`
@@ -50,16 +53,19 @@ func (f *FeedingInput) Validate() error {
 // ── Sleep models ──
 
 type Sleep struct {
-	ID        int       `json:"id"`
-	StartTime time.Time `json:"start_time"`
-	EndTime   time.Time `json:"end_time"`
-	CreatedAt time.Time `json:"created_at"`
-	UpdatedAt time.Time `json:"updated_at"`
+	ID        int        `json:"id"`
+	StartTime time.Time  `json:"start_time"`
+	EndTime   *time.Time `json:"end_time,omitempty"`
+	SleepType string     `json:"sleep_type"`
+	Status    string     `json:"status"`
+	CreatedAt time.Time  `json:"created_at"`
+	UpdatedAt time.Time  `json:"updated_at"`
 }
 
 type SleepInput struct {
 	StartTime string `json:"start_time"`
 	EndTime   string `json:"end_time"`
+	SleepType string `json:"sleep_type,omitempty"`
 }
 
 type DailySleepTotal struct {
@@ -68,16 +74,85 @@ type DailySleepTotal struct {
 }
 
 func (s *SleepInput) Validate() error {
-	start, err := time.Parse(time.RFC3339, s.StartTime)
+	_, err := time.Parse(time.RFC3339, s.StartTime)
 	if err != nil {
 		return fmt.Errorf("invalid start_time format, use RFC3339")
+	}
+	if s.EndTime == "" {
+		return fmt.Errorf("end_time is required")
 	}
 	end, err := time.Parse(time.RFC3339, s.EndTime)
 	if err != nil {
 		return fmt.Errorf("invalid end_time format, use RFC3339")
 	}
+	start, _ := time.Parse(time.RFC3339, s.StartTime)
 	if end.Before(start) {
 		return fmt.Errorf("end_time must not be before start_time")
+	}
+	dur := end.Sub(start)
+	if dur > 24*time.Hour {
+		return fmt.Errorf("sleep duration cannot exceed 24 hours")
+	}
+	if s.SleepType == "" {
+		s.SleepType = "nap"
+	}
+	if s.SleepType != "nap" && s.SleepType != "night" {
+		return fmt.Errorf("sleep_type must be 'nap' or 'night'")
+	}
+	return nil
+}
+
+// SleepStartInput is the payload for POST /sleep/start.
+type SleepStartInput struct {
+	StartTime string `json:"start_time"`
+	SleepType string `json:"sleep_type,omitempty"`
+}
+
+func (s *SleepStartInput) Validate() error {
+	st, err := time.Parse(time.RFC3339, s.StartTime)
+	if err != nil {
+		return fmt.Errorf("invalid start_time format, use RFC3339")
+	}
+	if st.After(time.Now().Add(time.Minute)) {
+		return fmt.Errorf("start_time cannot be in the future")
+	}
+	if s.SleepType == "" {
+		s.SleepType = "nap"
+	}
+	if s.SleepType != "nap" && s.SleepType != "night" {
+		return fmt.Errorf("sleep_type must be 'nap' or 'night'")
+	}
+	return nil
+}
+
+// SleepStopInput is the payload for POST /sleep/{id}/stop.
+type SleepStopInput struct {
+	EndTime string `json:"end_time"`
+}
+
+func (s *SleepStopInput) Validate() error {
+	et, err := time.Parse(time.RFC3339, s.EndTime)
+	if err != nil {
+		return fmt.Errorf("invalid end_time format, use RFC3339")
+	}
+	if et.After(time.Now().Add(time.Minute)) {
+		return fmt.Errorf("end_time cannot be in the future")
+	}
+	return nil
+}
+
+// SleepStartTimeInput is the payload for PATCH /sleep/{id}/start-time.
+type SleepStartTimeInput struct {
+	StartTime string `json:"start_time"`
+}
+
+func (s *SleepStartTimeInput) Validate() error {
+	st, err := time.Parse(time.RFC3339, s.StartTime)
+	if err != nil {
+		return fmt.Errorf("invalid start_time format, use RFC3339")
+	}
+	if st.After(time.Now().Add(time.Minute)) {
+		return fmt.Errorf("start_time cannot be in the future")
 	}
 	return nil
 }

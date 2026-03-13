@@ -114,6 +114,14 @@ h1 {
     background-color: #c7550a !important;
     color: #fff !important;
 }
+.bg-sleep-nap {
+    background-color: #e89b3e !important;
+    color: #fff !important;
+}
+.bg-sleep-night {
+    background-color: #3d2c7c !important;
+    color: #fff !important;
+}
 
 /* Development tab theme color */
 .btn-dev {

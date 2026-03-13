@@ -156,10 +156,11 @@ func (m *mockRepository) CreateSleep(input SleepInput) (Sleep, error) {
 	if m.sleepCreateErr != nil {
 		return Sleep{}, m.sleepCreateErr
 	}
+	et := time.Now().Add(time.Hour)
 	s := Sleep{
 		ID:        1,
 		StartTime: time.Now(),
-		EndTime:   time.Now().Add(time.Hour),
+		EndTime:   &et,
 		CreatedAt: time.Now(),
 		UpdatedAt: time.Now(),
 	}
@@ -172,10 +173,11 @@ func (m *mockRepository) UpdateSleep(id int, input SleepInput) (Sleep, error) {
 	if m.sleepUpdateErr != nil {
 		return Sleep{}, m.sleepUpdateErr
 	}
+	et := time.Now().Add(time.Hour)
 	s := Sleep{
 		ID:        id,
 		StartTime: time.Now(),
-		EndTime:   time.Now().Add(time.Hour),
+		EndTime:   &et,
 		CreatedAt: time.Now(),
 		UpdatedAt: time.Now(),
 	}
@@ -195,6 +197,75 @@ func (m *mockRepository) GetSleepDailyTotals(days int, tz string) ([]DailySleepT
 func (m *mockRepository) GetSleepDailyTotalsByMonth(month string, tz string) ([]DailySleepTotal, error) {
 	m.lastDate = month
 	return m.sleepDailyTotals, m.sleepDailyErr
+}
+
+func (m *mockRepository) GetActiveSleep() (*Sleep, error) {
+	if m.sleepGetErr != nil {
+		return nil, m.sleepGetErr
+	}
+	for _, s := range m.sleeps {
+		if s.Status == "active" {
+			return &s, nil
+		}
+	}
+	return nil, nil
+}
+
+func (m *mockRepository) StartSleep(input SleepStartInput) (Sleep, error) {
+	if m.sleepCreateErr != nil {
+		return Sleep{}, m.sleepCreateErr
+	}
+	now := time.Now()
+	st, _ := time.Parse(time.RFC3339, input.StartTime)
+	sleepType := input.SleepType
+	if sleepType == "" {
+		sleepType = "nap"
+	}
+	s := Sleep{
+		ID:        len(m.sleeps) + 1,
+		StartTime: st,
+		SleepType: sleepType,
+		Status:    "active",
+		CreatedAt: now,
+		UpdatedAt: now,
+	}
+	m.sleeps = append(m.sleeps, s)
+	return s, nil
+}
+
+func (m *mockRepository) StopSleep(id int, input SleepStopInput) (Sleep, error) {
+	m.lastID = id
+	if m.sleepUpdateErr != nil {
+		return Sleep{}, m.sleepUpdateErr
+	}
+	et, _ := time.Parse(time.RFC3339, input.EndTime)
+	now := time.Now()
+	return Sleep{
+		ID:        id,
+		StartTime: now.Add(-time.Hour),
+		EndTime:   &et,
+		SleepType: "nap",
+		Status:    "completed",
+		CreatedAt: now,
+		UpdatedAt: now,
+	}, nil
+}
+
+func (m *mockRepository) UpdateSleepStartTime(id int, input SleepStartTimeInput) (Sleep, error) {
+	m.lastID = id
+	if m.sleepUpdateErr != nil {
+		return Sleep{}, m.sleepUpdateErr
+	}
+	st, _ := time.Parse(time.RFC3339, input.StartTime)
+	now := time.Now()
+	return Sleep{
+		ID:        id,
+		StartTime: st,
+		SleepType: "nap",
+		Status:    "active",
+		CreatedAt: now,
+		UpdatedAt: now,
+	}, nil
 }
 
 // ── Baby profile & development mock methods ──
@@ -761,10 +832,12 @@ func validSleepJSON() string {
 // --- HandleSleeps tests ---
 
 func TestHandleSleeps_GET_Success(t *testing.T) {
+	et1 := time.Now().Add(time.Hour)
+	et2 := time.Now().Add(2 * time.Hour)
 	mock := &mockRepository{
 		sleeps: []Sleep{
-			{ID: 1, StartTime: time.Now(), EndTime: time.Now().Add(time.Hour)},
-			{ID: 2, StartTime: time.Now(), EndTime: time.Now().Add(2 * time.Hour)},
+			{ID: 1, StartTime: time.Now(), EndTime: &et1, SleepType: "nap", Status: "completed"},
+			{ID: 2, StartTime: time.Now(), EndTime: &et2, SleepType: "night", Status: "completed"},
 		},
 	}
 	srv := NewServer(mock)
@@ -1081,9 +1154,10 @@ func TestHandleSleepDailyTotals_MethodNotAllowed(t *testing.T) {
 // --- HandleLastSleep tests ---
 
 func TestHandleLastSleep_GET_Success(t *testing.T) {
+	et := time.Now().Add(time.Hour)
 	mock := &mockRepository{
 		sleeps: []Sleep{
-			{ID: 1, StartTime: time.Now(), EndTime: time.Now().Add(time.Hour)},
+			{ID: 1, StartTime: time.Now(), EndTime: &et, SleepType: "nap", Status: "completed"},
 		},
 	}
 	srv := NewServer(mock)
@@ -1875,5 +1949,118 @@ func TestHandleBaths_POST_RepoError(t *testing.T) {
 
 	if w.Code != http.StatusInternalServerError {
 		t.Errorf("expected 500, got %d", w.Code)
+	}
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// ── Sleep lifecycle endpoint tests ──
+// ═══════════════════════════════════════════════════════════════════════════
+
+func TestHandleSleepStart_Success(t *testing.T) {
+	mock := &mockRepository{}
+	srv := NewServer(mock)
+
+	pastTime := time.Now().Add(-5 * time.Minute).UTC().Format(time.RFC3339)
+	body := fmt.Sprintf(`{"start_time":"%s","sleep_type":"night"}`, pastTime)
+	req := httptest.NewRequest(http.MethodPost, "/api/sleeps/start", strings.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+
+	srv.HandleSleepStart(w, req)
+
+	if w.Code != http.StatusCreated {
+		t.Errorf("expected 201, got %d: %s", w.Code, w.Body.String())
+	}
+	var sleep Sleep
+	json.NewDecoder(w.Body).Decode(&sleep)
+	if sleep.Status != "active" {
+		t.Errorf("expected status 'active', got '%s'", sleep.Status)
+	}
+	if sleep.SleepType != "night" {
+		t.Errorf("expected sleep_type 'night', got '%s'", sleep.SleepType)
+	}
+}
+
+func TestHandleSleepStart_ConflictWhenActive(t *testing.T) {
+	now := time.Now()
+	mock := &mockRepository{
+		sleeps: []Sleep{{ID: 1, StartTime: now, Status: "active", SleepType: "nap"}},
+	}
+	srv := NewServer(mock)
+
+	pastTime := time.Now().Add(-5 * time.Minute).UTC().Format(time.RFC3339)
+	body := fmt.Sprintf(`{"start_time":"%s","sleep_type":"nap"}`, pastTime)
+	req := httptest.NewRequest(http.MethodPost, "/api/sleeps/start", strings.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+
+	srv.HandleSleepStart(w, req)
+
+	if w.Code != http.StatusConflict {
+		t.Errorf("expected 409, got %d: %s", w.Code, w.Body.String())
+	}
+}
+
+func TestHandleSleepStart_InvalidJSON(t *testing.T) {
+	mock := &mockRepository{}
+	srv := NewServer(mock)
+
+	req := httptest.NewRequest(http.MethodPost, "/api/sleeps/start", strings.NewReader("{bad"))
+	w := httptest.NewRecorder()
+
+	srv.HandleSleepStart(w, req)
+
+	if w.Code != http.StatusBadRequest {
+		t.Errorf("expected 400, got %d", w.Code)
+	}
+}
+
+func TestHandleSleepStart_MethodNotAllowed(t *testing.T) {
+	mock := &mockRepository{}
+	srv := NewServer(mock)
+
+	req := httptest.NewRequest(http.MethodGet, "/api/sleeps/start", nil)
+	w := httptest.NewRecorder()
+
+	srv.HandleSleepStart(w, req)
+
+	if w.Code != http.StatusMethodNotAllowed {
+		t.Errorf("expected 405, got %d", w.Code)
+	}
+}
+
+func TestHandleSleepActive_WithActive(t *testing.T) {
+	now := time.Now()
+	mock := &mockRepository{
+		sleeps: []Sleep{{ID: 1, StartTime: now, Status: "active", SleepType: "nap"}},
+	}
+	srv := NewServer(mock)
+
+	req := httptest.NewRequest(http.MethodGet, "/api/sleeps/active", nil)
+	w := httptest.NewRecorder()
+
+	srv.HandleSleepActive(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Errorf("expected 200, got %d", w.Code)
+	}
+	var sleep Sleep
+	json.NewDecoder(w.Body).Decode(&sleep)
+	if sleep.ID != 1 {
+		t.Errorf("expected sleep ID 1, got %d", sleep.ID)
+	}
+}
+
+func TestHandleSleepActive_NoActive(t *testing.T) {
+	mock := &mockRepository{}
+	srv := NewServer(mock)
+
+	req := httptest.NewRequest(http.MethodGet, "/api/sleeps/active", nil)
+	w := httptest.NewRecorder()
+
+	srv.HandleSleepActive(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Errorf("expected 200, got %d", w.Code)
 	}
 }

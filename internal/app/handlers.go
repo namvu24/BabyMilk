@@ -229,9 +229,20 @@ func (s *Server) HandleSleepByID(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Handle /api/sleeps/{id}/stop
+	if len(parts) >= 2 && parts[1] == "stop" {
+		s.stopSleep(w, r, id)
+		return
+	} else if len(parts) >= 2 {
+		respondError(w, http.StatusNotFound, "unknown sub-path")
+		return
+	}
+
 	switch r.Method {
 	case http.MethodPut:
 		s.updateSleep(w, r, id)
+	case http.MethodPatch:
+		s.editSleepStartTime(w, r, id)
 	case http.MethodDelete:
 		s.deleteSleep(w, r, id)
 	default:
@@ -366,6 +377,130 @@ func (s *Server) HandleLastSleep(w http.ResponseWriter, r *http.Request) {
 		respondJSON(w, http.StatusOK, nil)
 		return
 	}
+	respondJSON(w, http.StatusOK, sleep)
+}
+
+func (s *Server) HandleSleepStart(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		respondError(w, http.StatusMethodNotAllowed, "method not allowed")
+		return
+	}
+	var input SleepStartInput
+	if err := json.NewDecoder(r.Body).Decode(&input); err != nil {
+		respondError(w, http.StatusBadRequest, "invalid JSON")
+		return
+	}
+	if err := input.Validate(); err != nil {
+		respondError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	// Check for existing active sleep
+	active, err := s.Repo.GetActiveSleep()
+	if err != nil {
+		respondError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	if active != nil {
+		respondError(w, http.StatusConflict, "an active sleep session already exists")
+		return
+	}
+	sleep, err := s.Repo.StartSleep(input)
+	if err != nil {
+		if errors.Is(err, ErrConflict) {
+			respondError(w, http.StatusConflict, "an active sleep session already exists")
+			return
+		}
+		respondError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	log.Printf("sleep_start: id=%d type=%s", sleep.ID, sleep.SleepType)
+	respondJSON(w, http.StatusCreated, sleep)
+}
+
+func (s *Server) HandleSleepActive(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		respondError(w, http.StatusMethodNotAllowed, "method not allowed")
+		return
+	}
+	sleep, err := s.Repo.GetActiveSleep()
+	if err != nil {
+		respondError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	if sleep == nil {
+		respondJSON(w, http.StatusOK, nil)
+		return
+	}
+	respondJSON(w, http.StatusOK, sleep)
+}
+
+func (s *Server) stopSleep(w http.ResponseWriter, r *http.Request, id int) {
+	if r.Method != http.MethodPost {
+		respondError(w, http.StatusMethodNotAllowed, "method not allowed")
+		return
+	}
+	var input SleepStopInput
+	if err := json.NewDecoder(r.Body).Decode(&input); err != nil {
+		respondError(w, http.StatusBadRequest, "invalid JSON")
+		return
+	}
+	if err := input.Validate(); err != nil {
+		respondError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	// Validate end_time > start_time
+	active, err := s.Repo.GetActiveSleep()
+	if err != nil {
+		respondError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	if active == nil || active.ID != id {
+		respondError(w, http.StatusNotFound, "active sleep not found")
+		return
+	}
+	endTime, _ := time.Parse(time.RFC3339, input.EndTime)
+	if !endTime.After(active.StartTime) {
+		respondError(w, http.StatusBadRequest, "end_time must be after start_time")
+		return
+	}
+	if endTime.Sub(active.StartTime) > 24*time.Hour {
+		respondError(w, http.StatusBadRequest, "sleep duration cannot exceed 24 hours")
+		return
+	}
+	sleep, err := s.Repo.StopSleep(id, input)
+	if err != nil {
+		if errors.Is(err, ErrNotFound) {
+			respondError(w, http.StatusNotFound, "active sleep not found")
+			return
+		}
+		respondError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	_ = s.Repo.InvalidateInsightCache()
+	log.Printf("sleep_stop: id=%d", sleep.ID)
+	respondJSON(w, http.StatusOK, sleep)
+}
+
+func (s *Server) editSleepStartTime(w http.ResponseWriter, r *http.Request, id int) {
+	var input SleepStartTimeInput
+	if err := json.NewDecoder(r.Body).Decode(&input); err != nil {
+		respondError(w, http.StatusBadRequest, "invalid JSON")
+		return
+	}
+	if err := input.Validate(); err != nil {
+		respondError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	sleep, err := s.Repo.UpdateSleepStartTime(id, input)
+	if err != nil {
+		if errors.Is(err, ErrNotFound) {
+			respondError(w, http.StatusNotFound, "active sleep not found")
+			return
+		}
+		respondError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	log.Printf("sleep_edit_start_time: id=%d", sleep.ID)
 	respondJSON(w, http.StatusOK, sleep)
 }
 
