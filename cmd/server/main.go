@@ -1,12 +1,16 @@
 package main
 
 import (
+	"database/sql"
 	"log"
 	"net/http"
 	"os"
 	"strings"
+	"time"
 
 	"babymilk/internal/app"
+
+	"github.com/prometheus/client_golang/prometheus/promhttp"
 )
 
 func main() {
@@ -29,9 +33,20 @@ func main() {
 		log.Println("Warning: GEMINI_API_KEY not set — Development tab AI features disabled")
 	}
 
+	// Start DB connection pool metrics collector (every 5s)
+	app.StartDBStatsCollector(db, 5*time.Second)
+
 	srv := app.NewServer(repo, gemini)
 
 	mux := http.NewServeMux()
+
+	// Observability endpoints
+	mux.Handle("/metrics", promhttp.Handler())
+	mux.HandleFunc("/healthz", func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+		w.Write([]byte("ok"))
+	})
+	mux.HandleFunc("/readyz", readyzHandler(db))
 
 	// API routes — Feedings
 	mux.HandleFunc("/api/feedings/daily", srv.HandleDailyTotals)
@@ -72,7 +87,7 @@ func main() {
 		port = "8080"
 	}
 
-	handler := corsMiddleware(maxBodyMiddleware(mux))
+	handler := app.PrometheusMiddleware(corsMiddleware(maxBodyMiddleware(mux)))
 
 	log.Printf("BabyMilk server starting on http://localhost:%s", port)
 	log.Fatal(http.ListenAndServe(":"+port, handler))
@@ -102,4 +117,17 @@ func corsMiddleware(next http.Handler) http.Handler {
 		}
 		next.ServeHTTP(w, r)
 	})
+}
+
+// readyzHandler returns 200 if the DB is reachable, 503 otherwise.
+func readyzHandler(db *sql.DB) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		if err := db.Ping(); err != nil {
+			w.WriteHeader(http.StatusServiceUnavailable)
+			w.Write([]byte("db not ready"))
+			return
+		}
+		w.WriteHeader(http.StatusOK)
+		w.Write([]byte("ok"))
+	}
 }

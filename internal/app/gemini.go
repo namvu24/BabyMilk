@@ -144,6 +144,8 @@ Important guidelines:
 
 	log.Printf("Calling Gemini API for week %d (model: %s)", weekNumber, g.Model)
 
+	start := time.Now()
+
 	// Retry loop for invalid JSON content (separate from HTTP-level retries in callWithRetry)
 	const maxJSONRetries = 2
 	var lastJSONErr error
@@ -156,6 +158,7 @@ Important guidelines:
 
 		body, err := g.callWithRetry(url, jsonBody)
 		if err != nil {
+			RecordGeminiRequest("error", time.Since(start))
 			return "", err
 		}
 
@@ -199,9 +202,11 @@ Important guidelines:
 			continue
 		}
 
+		RecordGeminiRequest("success", time.Since(start))
 		return text, nil
 	}
 
+	RecordGeminiRequest("error", time.Since(start))
 	return "", fmt.Errorf("Gemini returned invalid JSON after %d attempts: %w", maxJSONRetries+1, lastJSONErr)
 }
 
@@ -213,6 +218,7 @@ func (g *GeminiClient) callWithRetry(url string, jsonBody []byte) ([]byte, error
 
 	for attempt := 0; attempt <= g.MaxRetries; attempt++ {
 		if attempt > 0 {
+			RecordGeminiRetry()
 			delay := g.backoffDelay(attempt, lastErr)
 			log.Printf("Gemini API retry %d/%d after %v (previous error: %v)", attempt, g.MaxRetries, delay, lastErr)
 			time.Sleep(delay)
@@ -400,6 +406,8 @@ Important guidelines:
 
 	log.Printf("Calling Gemini API for personalized insights (model: %s)", g.Model)
 
+	start := time.Now()
+
 	const maxJSONRetries = 2
 	var lastJSONErr error
 
@@ -411,6 +419,7 @@ Important guidelines:
 
 		body, err := g.callWithRetry(url, jsonBody)
 		if err != nil {
+			RecordGeminiRequest("error", time.Since(start))
 			return "", err
 		}
 
@@ -451,8 +460,10 @@ Important guidelines:
 			continue
 		}
 
+		RecordGeminiRequest("success", time.Since(start))
 		return text, nil
 	}
 
+	RecordGeminiRequest("error", time.Since(start))
 	return "", fmt.Errorf("Gemini returned invalid JSON after %d attempts: %w", maxJSONRetries+1, lastJSONErr)
 }
