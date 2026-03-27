@@ -59,12 +59,11 @@ func cleanTable(t *testing.T) {
 	}
 }
 
-func seedFeeding(t *testing.T, amountML int, startTime, endTime string) Feeding {
+func seedFeeding(t *testing.T, amountML int, endTime string) Feeding {
 	t.Helper()
 	input := FeedingInput{
-		AmountML:  amountML,
-		StartTime: startTime,
-		EndTime:   endTime,
+		AmountML: amountML,
+		EndTime:  endTime,
 	}
 	f, err := testRepo.CreateFeeding(input)
 	if err != nil {
@@ -76,9 +75,8 @@ func seedFeeding(t *testing.T, amountML int, startTime, endTime string) Feeding 
 func TestCreateFeeding_Integration(t *testing.T) {
 	cleanTable(t)
 	input := FeedingInput{
-		AmountML:  150,
-		StartTime: "2025-01-15T08:00:00Z",
-		EndTime:   "2025-01-15T08:20:00Z",
+		AmountML: 150,
+		EndTime:  "2025-01-15T08:20:00Z",
 	}
 	f, err := testRepo.CreateFeeding(input)
 	if err != nil {
@@ -94,8 +92,8 @@ func TestCreateFeeding_Integration(t *testing.T) {
 
 func TestGetFeedings_Integration(t *testing.T) {
 	cleanTable(t)
-	seedFeeding(t, 100, "2025-01-15T08:00:00Z", "2025-01-15T08:10:00Z")
-	seedFeeding(t, 200, "2025-01-15T09:00:00Z", "2025-01-15T09:15:00Z")
+	seedFeeding(t, 100, "2025-01-15T08:10:00Z")
+	seedFeeding(t, 200, "2025-01-15T09:15:00Z")
 
 	feedings, err := testRepo.GetFeedings("", "")
 	if err != nil {
@@ -108,8 +106,8 @@ func TestGetFeedings_Integration(t *testing.T) {
 
 func TestGetFeedings_WithDateFilter_Integration(t *testing.T) {
 	cleanTable(t)
-	seedFeeding(t, 100, "2025-01-15T08:00:00Z", "2025-01-15T08:10:00Z")
-	seedFeeding(t, 200, "2025-01-16T09:00:00Z", "2025-01-16T09:15:00Z")
+	seedFeeding(t, 100, "2025-01-15T08:10:00Z")
+	seedFeeding(t, 200, "2025-01-16T09:15:00Z")
 
 	feedings, err := testRepo.GetFeedings("2025-01-15", "")
 	if err != nil {
@@ -122,12 +120,11 @@ func TestGetFeedings_WithDateFilter_Integration(t *testing.T) {
 
 func TestUpdateFeeding_Integration(t *testing.T) {
 	cleanTable(t)
-	created := seedFeeding(t, 100, "2025-01-15T08:00:00Z", "2025-01-15T08:10:00Z")
+	created := seedFeeding(t, 100, "2025-01-15T08:10:00Z")
 
 	input := FeedingInput{
-		AmountML:  250,
-		StartTime: "2025-01-15T08:00:00Z",
-		EndTime:   "2025-01-15T08:30:00Z",
+		AmountML: 250,
+		EndTime:  "2025-01-15T08:30:00Z",
 	}
 	updated, err := testRepo.UpdateFeeding(created.ID, input)
 	if err != nil {
@@ -143,7 +140,7 @@ func TestUpdateFeeding_Integration(t *testing.T) {
 
 func TestDeleteFeeding_Integration(t *testing.T) {
 	cleanTable(t)
-	created := seedFeeding(t, 100, "2025-01-15T08:00:00Z", "2025-01-15T08:10:00Z")
+	created := seedFeeding(t, 100, "2025-01-15T08:10:00Z")
 
 	err := testRepo.DeleteFeeding(created.ID)
 	if err != nil {
@@ -173,10 +170,8 @@ func TestGetDailyTotals_Integration(t *testing.T) {
 	now := time.Now()
 	today := now.Format("2006-01-02")
 	seedFeeding(t, 100,
-		fmt.Sprintf("%sT08:00:00Z", today),
 		fmt.Sprintf("%sT08:10:00Z", today))
 	seedFeeding(t, 200,
-		fmt.Sprintf("%sT09:00:00Z", today),
 		fmt.Sprintf("%sT09:15:00Z", today))
 
 	totals, err := testRepo.GetDailyTotals(7, "")
