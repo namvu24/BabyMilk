@@ -11,7 +11,6 @@ func RunMigrations(db *sql.DB) {
 		CREATE TABLE IF NOT EXISTS feedings (
 			id         SERIAL PRIMARY KEY,
 			amount_ml  INTEGER NOT NULL,
-			start_time TIMESTAMPTZ NOT NULL,
 			end_time   TIMESTAMPTZ NOT NULL,
 			created_at TIMESTAMPTZ DEFAULT NOW(),
 			updated_at TIMESTAMPTZ DEFAULT NOW()
@@ -20,6 +19,12 @@ func RunMigrations(db *sql.DB) {
 	if err != nil {
 		log.Fatalf("Failed to run feedings migration: %v", err)
 	}
+
+	// Remove start_time from feedings if it exists
+	_, _ = db.Exec(`ALTER TABLE feedings DROP COLUMN IF EXISTS start_time`)
+
+	// Ensure index on feedings(end_time) for efficient filtering and sorting
+	_, _ = db.Exec(`CREATE INDEX IF NOT EXISTS idx_feedings_end_time ON feedings (end_time)`)
 
 	_, err = db.Exec(`
 		CREATE TABLE IF NOT EXISTS sleeps (

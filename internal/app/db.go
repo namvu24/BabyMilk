@@ -22,6 +22,7 @@ func InitDB() (*sql.DB, error) {
 	}
 	db.SetMaxOpenConns(10)
 	db.SetMaxIdleConns(5)
+	db.SetConnMaxLifetime(5 * time.Minute)
 	if err := db.Ping(); err != nil {
 		return nil, err
 	}
@@ -39,21 +40,22 @@ func NewPostgresRepository(db *sql.DB) *PostgresRepository {
 }
 
 func (r *PostgresRepository) GetFeedings(dateFilter string, tz string) ([]Feeding, error) {
+	defer ObserveDBQuery("GetFeedings", time.Now())
 	if tz == "" {
 		tz = "UTC"
 	}
-	query := `SELECT id, amount_ml, start_time, end_time, created_at, updated_at FROM feedings`
+	query := `SELECT id, amount_ml, end_time, created_at, updated_at FROM feedings`
 	var args []interface{}
 	if len(dateFilter) == 7 {
 		// YYYY-MM month filter — convert to client timezone before comparing
-		query += ` WHERE to_char(start_time AT TIME ZONE $1, 'YYYY-MM') = $2`
+		query += ` WHERE to_char(end_time AT TIME ZONE $1, 'YYYY-MM') = $2`
 		args = append(args, tz, dateFilter)
 	} else if len(dateFilter) == 10 {
 		// YYYY-MM-DD date filter — convert to client timezone before comparing
-		query += ` WHERE (start_time AT TIME ZONE $1)::date = $2`
+		query += ` WHERE (end_time AT TIME ZONE $1)::date = $2`
 		args = append(args, tz, dateFilter)
 	}
-	query += ` ORDER BY start_time DESC`
+	query += ` ORDER BY end_time DESC`
 
 	rows, err := r.DB.Query(query, args...)
 	if err != nil {
@@ -64,7 +66,7 @@ func (r *PostgresRepository) GetFeedings(dateFilter string, tz string) ([]Feedin
 	var feedings []Feeding
 	for rows.Next() {
 		var f Feeding
-		if err := rows.Scan(&f.ID, &f.AmountML, &f.StartTime, &f.EndTime, &f.CreatedAt, &f.UpdatedAt); err != nil {
+		if err := rows.Scan(&f.ID, &f.AmountML, &f.EndTime, &f.CreatedAt, &f.UpdatedAt); err != nil {
 			return nil, err
 		}
 		feedings = append(feedings, f)
@@ -73,11 +75,12 @@ func (r *PostgresRepository) GetFeedings(dateFilter string, tz string) ([]Feedin
 }
 
 func (r *PostgresRepository) GetLastFeeding() (*Feeding, error) {
+	defer ObserveDBQuery("GetLastFeeding", time.Now())
 	var f Feeding
 	err := r.DB.QueryRow(
-		`SELECT id, amount_ml, start_time, end_time, created_at, updated_at
-		 FROM feedings ORDER BY created_at DESC LIMIT 1`,
-	).Scan(&f.ID, &f.AmountML, &f.StartTime, &f.EndTime, &f.CreatedAt, &f.UpdatedAt)
+		`SELECT id, amount_ml, end_time, created_at, updated_at
+		 FROM feedings ORDER BY end_time DESC LIMIT 1`,
+	).Scan(&f.ID, &f.AmountML, &f.EndTime, &f.CreatedAt, &f.UpdatedAt)
 	if err != nil {
 		if err == sql.ErrNoRows {
 			return nil, nil
@@ -88,27 +91,33 @@ func (r *PostgresRepository) GetLastFeeding() (*Feeding, error) {
 }
 
 func (r *PostgresRepository) CreateFeeding(input FeedingInput) (Feeding, error) {
-	start, _ := time.Parse(time.RFC3339, input.StartTime)
-	end, _ := time.Parse(time.RFC3339, input.EndTime)
+	defer ObserveDBQuery("CreateFeeding", time.Now())
+	end, err := time.Parse(time.RFC3339, input.EndTime)
+	if err != nil {
+		return Feeding{}, fmt.Errorf("invalid end_time: %w", err)
+	}
 	var f Feeding
-	err := r.DB.QueryRow(
-		`INSERT INTO feedings (amount_ml, start_time, end_time) VALUES ($1, $2, $3)
-		 RETURNING id, amount_ml, start_time, end_time, created_at, updated_at`,
-		input.AmountML, start, end,
-	).Scan(&f.ID, &f.AmountML, &f.StartTime, &f.EndTime, &f.CreatedAt, &f.UpdatedAt)
+	err = r.DB.QueryRow(
+		`INSERT INTO feedings (amount_ml, end_time) VALUES ($1, $2)
+		 RETURNING id, amount_ml, end_time, created_at, updated_at`,
+		input.AmountML, end,
+	).Scan(&f.ID, &f.AmountML, &f.EndTime, &f.CreatedAt, &f.UpdatedAt)
 	return f, err
 }
 
 func (r *PostgresRepository) UpdateFeeding(id int, input FeedingInput) (Feeding, error) {
-	start, _ := time.Parse(time.RFC3339, input.StartTime)
-	end, _ := time.Parse(time.RFC3339, input.EndTime)
+	defer ObserveDBQuery("UpdateFeeding", time.Now())
+	end, err := time.Parse(time.RFC3339, input.EndTime)
+	if err != nil {
+		return Feeding{}, fmt.Errorf("invalid end_time: %w", err)
+	}
 	var f Feeding
-	err := r.DB.QueryRow(
-		`UPDATE feedings SET amount_ml=$1, start_time=$2, end_time=$3, updated_at=NOW()
-		 WHERE id=$4
-		 RETURNING id, amount_ml, start_time, end_time, created_at, updated_at`,
-		input.AmountML, start, end, id,
-	).Scan(&f.ID, &f.AmountML, &f.StartTime, &f.EndTime, &f.CreatedAt, &f.UpdatedAt)
+	err = r.DB.QueryRow(
+		`UPDATE feedings SET amount_ml=$1, end_time=$2, updated_at=NOW()
+		 WHERE id=$3
+		 RETURNING id, amount_ml, end_time, created_at, updated_at`,
+		input.AmountML, end, id,
+	).Scan(&f.ID, &f.AmountML, &f.EndTime, &f.CreatedAt, &f.UpdatedAt)
 	if err == sql.ErrNoRows {
 		return Feeding{}, ErrNotFound
 	}
@@ -116,6 +125,7 @@ func (r *PostgresRepository) UpdateFeeding(id int, input FeedingInput) (Feeding,
 }
 
 func (r *PostgresRepository) DeleteFeeding(id int) error {
+	defer ObserveDBQuery("DeleteFeeding", time.Now())
 	result, err := r.DB.Exec(`DELETE FROM feedings WHERE id=$1`, id)
 	if err != nil {
 		return err
@@ -131,18 +141,19 @@ func (r *PostgresRepository) DeleteFeeding(id int) error {
 }
 
 func (r *PostgresRepository) GetDailyTotals(days int, tz string) ([]DailyTotal, error) {
+	defer ObserveDBQuery("GetDailyTotals", time.Now())
 	if days <= 0 {
 		days = 7
 	}
 	if tz == "" {
 		tz = "UTC"
 	}
-	// Convert UTC start_time to client timezone before extracting the date
+	// Convert UTC end_time to client timezone before extracting the date
 	rows, err := r.DB.Query(
-		`SELECT (start_time AT TIME ZONE $1)::date AS date, SUM(amount_ml) AS total_ml
+		`SELECT (end_time AT TIME ZONE $1)::date AS date, SUM(amount_ml) AS total_ml
 		 FROM feedings
-		 WHERE start_time >= NOW() - INTERVAL '1 day' * $2
-		 GROUP BY (start_time AT TIME ZONE $1)::date
+		 WHERE end_time >= NOW() - INTERVAL '1 day' * $2
+		 GROUP BY (end_time AT TIME ZONE $1)::date
 		 ORDER BY date`, tz, days)
 	if err != nil {
 		return nil, err
@@ -161,15 +172,16 @@ func (r *PostgresRepository) GetDailyTotals(days int, tz string) ([]DailyTotal, 
 }
 
 func (r *PostgresRepository) GetDailyTotalsByMonth(month string, tz string) ([]DailyTotal, error) {
+	defer ObserveDBQuery("GetDailyTotalsByMonth", time.Now())
 	if tz == "" {
 		tz = "UTC"
 	}
-	// Convert UTC start_time to client timezone before extracting date and month
+	// Convert UTC end_time to client timezone before extracting date and month
 	rows, err := r.DB.Query(
-		`SELECT (start_time AT TIME ZONE $1)::date AS date, SUM(amount_ml) AS total_ml
+		`SELECT (end_time AT TIME ZONE $1)::date AS date, SUM(amount_ml) AS total_ml
 		 FROM feedings
-		 WHERE to_char(start_time AT TIME ZONE $1, 'YYYY-MM') = $2
-		 GROUP BY (start_time AT TIME ZONE $1)::date
+		 WHERE to_char(end_time AT TIME ZONE $1, 'YYYY-MM') = $2
+		 GROUP BY (end_time AT TIME ZONE $1)::date
 		 ORDER BY date`, tz, month)
 	if err != nil {
 		return nil, err
@@ -190,6 +202,7 @@ func (r *PostgresRepository) GetDailyTotalsByMonth(month string, tz string) ([]D
 // ── Sleep repository methods ──
 
 func (r *PostgresRepository) GetSleeps(dateFilter string, tz string) ([]Sleep, error) {
+	defer ObserveDBQuery("GetSleeps", time.Now())
 	if tz == "" {
 		tz = "UTC"
 	}
@@ -226,6 +239,7 @@ func (r *PostgresRepository) GetSleeps(dateFilter string, tz string) ([]Sleep, e
 }
 
 func (r *PostgresRepository) GetLastSleep() (*Sleep, error) {
+	defer ObserveDBQuery("GetLastSleep", time.Now())
 	var s Sleep
 	var endTime sql.NullTime
 	err := r.DB.QueryRow(
@@ -245,7 +259,11 @@ func (r *PostgresRepository) GetLastSleep() (*Sleep, error) {
 }
 
 func (r *PostgresRepository) CreateSleep(input SleepInput) (Sleep, error) {
-	start, _ := time.Parse(time.RFC3339, input.StartTime)
+	defer ObserveDBQuery("CreateSleep", time.Now())
+	start, err := time.Parse(time.RFC3339, input.StartTime)
+	if err != nil {
+		return Sleep{}, fmt.Errorf("invalid start_time: %w", err)
+	}
 	sleepType := input.SleepType
 	if sleepType == "" {
 		sleepType = "nap"
@@ -253,8 +271,11 @@ func (r *PostgresRepository) CreateSleep(input SleepInput) (Sleep, error) {
 	var s Sleep
 	var endTime sql.NullTime
 	if input.EndTime != "" {
-		end, _ := time.Parse(time.RFC3339, input.EndTime)
-		err := r.DB.QueryRow(
+		end, err := time.Parse(time.RFC3339, input.EndTime)
+		if err != nil {
+			return Sleep{}, fmt.Errorf("invalid end_time: %w", err)
+		}
+		err = r.DB.QueryRow(
 			`INSERT INTO sleeps (start_time, end_time, sleep_type, status) VALUES ($1, $2, $3, 'completed')
 			 RETURNING id, start_time, end_time, sleep_type, status, created_at, updated_at`,
 			start, end, sleepType,
@@ -264,7 +285,7 @@ func (r *PostgresRepository) CreateSleep(input SleepInput) (Sleep, error) {
 		}
 		return s, err
 	}
-	err := r.DB.QueryRow(
+	err = r.DB.QueryRow(
 		`INSERT INTO sleeps (start_time, sleep_type, status) VALUES ($1, $2, 'active')
 		 RETURNING id, start_time, end_time, sleep_type, status, created_at, updated_at`,
 		start, sleepType,
@@ -276,15 +297,22 @@ func (r *PostgresRepository) CreateSleep(input SleepInput) (Sleep, error) {
 }
 
 func (r *PostgresRepository) UpdateSleep(id int, input SleepInput) (Sleep, error) {
-	start, _ := time.Parse(time.RFC3339, input.StartTime)
-	end, _ := time.Parse(time.RFC3339, input.EndTime)
+	defer ObserveDBQuery("UpdateSleep", time.Now())
+	start, err := time.Parse(time.RFC3339, input.StartTime)
+	if err != nil {
+		return Sleep{}, fmt.Errorf("invalid start_time: %w", err)
+	}
+	end, err := time.Parse(time.RFC3339, input.EndTime)
+	if err != nil {
+		return Sleep{}, fmt.Errorf("invalid end_time: %w", err)
+	}
 	sleepType := input.SleepType
 	if sleepType == "" {
 		sleepType = "nap"
 	}
 	var s Sleep
 	var endTime sql.NullTime
-	err := r.DB.QueryRow(
+	err = r.DB.QueryRow(
 		`UPDATE sleeps SET start_time=$1, end_time=$2, sleep_type=$3, status='completed', updated_at=NOW()
 		 WHERE id=$4
 		 RETURNING id, start_time, end_time, sleep_type, status, created_at, updated_at`,
@@ -300,6 +328,7 @@ func (r *PostgresRepository) UpdateSleep(id int, input SleepInput) (Sleep, error
 }
 
 func (r *PostgresRepository) DeleteSleep(id int) error {
+	defer ObserveDBQuery("DeleteSleep", time.Now())
 	result, err := r.DB.Exec(`DELETE FROM sleeps WHERE id=$1`, id)
 	if err != nil {
 		return err
@@ -315,6 +344,7 @@ func (r *PostgresRepository) DeleteSleep(id int) error {
 }
 
 func (r *PostgresRepository) GetActiveSleep() (*Sleep, error) {
+	defer ObserveDBQuery("GetActiveSleep", time.Now())
 	var s Sleep
 	var endTime sql.NullTime
 	err := r.DB.QueryRow(
@@ -334,14 +364,18 @@ func (r *PostgresRepository) GetActiveSleep() (*Sleep, error) {
 }
 
 func (r *PostgresRepository) StartSleep(input SleepStartInput) (Sleep, error) {
-	start, _ := time.Parse(time.RFC3339, input.StartTime)
+	defer ObserveDBQuery("StartSleep", time.Now())
+	start, err := time.Parse(time.RFC3339, input.StartTime)
+	if err != nil {
+		return Sleep{}, fmt.Errorf("invalid start_time: %w", err)
+	}
 	sleepType := input.SleepType
 	if sleepType == "" {
 		sleepType = "nap"
 	}
 	var s Sleep
 	var endTime sql.NullTime
-	err := r.DB.QueryRow(
+	err = r.DB.QueryRow(
 		`INSERT INTO sleeps (start_time, sleep_type, status) VALUES ($1, $2, 'active')
 		 RETURNING id, start_time, end_time, sleep_type, status, created_at, updated_at`,
 		start, sleepType,
@@ -359,10 +393,14 @@ func (r *PostgresRepository) StartSleep(input SleepStartInput) (Sleep, error) {
 }
 
 func (r *PostgresRepository) StopSleep(id int, input SleepStopInput) (Sleep, error) {
-	end, _ := time.Parse(time.RFC3339, input.EndTime)
+	defer ObserveDBQuery("StopSleep", time.Now())
+	end, err := time.Parse(time.RFC3339, input.EndTime)
+	if err != nil {
+		return Sleep{}, fmt.Errorf("invalid end_time: %w", err)
+	}
 	var s Sleep
 	var endTime sql.NullTime
-	err := r.DB.QueryRow(
+	err = r.DB.QueryRow(
 		`UPDATE sleeps SET end_time=$1, status='completed', updated_at=NOW()
 		 WHERE id=$2 AND status='active'
 		 RETURNING id, start_time, end_time, sleep_type, status, created_at, updated_at`,
@@ -378,10 +416,14 @@ func (r *PostgresRepository) StopSleep(id int, input SleepStopInput) (Sleep, err
 }
 
 func (r *PostgresRepository) UpdateSleepStartTime(id int, input SleepStartTimeInput) (Sleep, error) {
-	start, _ := time.Parse(time.RFC3339, input.StartTime)
+	defer ObserveDBQuery("UpdateSleepStartTime", time.Now())
+	start, err := time.Parse(time.RFC3339, input.StartTime)
+	if err != nil {
+		return Sleep{}, fmt.Errorf("invalid start_time: %w", err)
+	}
 	var s Sleep
 	var endTime sql.NullTime
-	err := r.DB.QueryRow(
+	err = r.DB.QueryRow(
 		`UPDATE sleeps SET start_time=$1, updated_at=NOW()
 		 WHERE id=$2 AND status='active'
 		 RETURNING id, start_time, end_time, sleep_type, status, created_at, updated_at`,
@@ -397,6 +439,7 @@ func (r *PostgresRepository) UpdateSleepStartTime(id int, input SleepStartTimeIn
 }
 
 func (r *PostgresRepository) GetSleepDailyTotals(days int, tz string) ([]DailySleepTotal, error) {
+	defer ObserveDBQuery("GetSleepDailyTotals", time.Now())
 	if days <= 0 {
 		days = 7
 	}
@@ -428,6 +471,7 @@ func (r *PostgresRepository) GetSleepDailyTotals(days int, tz string) ([]DailySl
 }
 
 func (r *PostgresRepository) GetSleepDailyTotalsByMonth(month string, tz string) ([]DailySleepTotal, error) {
+	defer ObserveDBQuery("GetSleepDailyTotalsByMonth", time.Now())
 	if tz == "" {
 		tz = "UTC"
 	}
@@ -458,12 +502,13 @@ func (r *PostgresRepository) GetSleepDailyTotalsByMonth(month string, tz string)
 // ── Baby profile & development cache ──
 
 func (r *PostgresRepository) GetBabyProfile() (*BabyProfile, error) {
+	defer ObserveDBQuery("GetBabyProfile", time.Now())
 	var p BabyProfile
 	var name, gender, milkType sql.NullString
 	err := r.DB.QueryRow(`SELECT id, date_of_birth, name, gender, milk_type, created_at, updated_at FROM baby_profile ORDER BY id LIMIT 1`).
 		Scan(&p.ID, &p.DateOfBirth, &name, &gender, &milkType, &p.CreatedAt, &p.UpdatedAt)
 	if err != nil {
-		if err.Error() == "sql: no rows in result set" {
+		if err == sql.ErrNoRows {
 			return nil, nil
 		}
 		return nil, err
@@ -481,6 +526,7 @@ func (r *PostgresRepository) GetBabyProfile() (*BabyProfile, error) {
 }
 
 func (r *PostgresRepository) SaveBabyProfile(input BabyProfileInput) (*BabyProfile, error) {
+	defer ObserveDBQuery("SaveBabyProfile", time.Now())
 	var p BabyProfile
 	var name, gender, milkType sql.NullString
 	// Try update first (single-row table pattern)
@@ -491,7 +537,7 @@ func (r *PostgresRepository) SaveBabyProfile(input BabyProfileInput) (*BabyProfi
 		input.DateOfBirth, toNullString(input.Name), toNullString(input.Gender), toNullString(input.MilkType)).
 		Scan(&p.ID, &p.DateOfBirth, &name, &gender, &milkType, &p.CreatedAt, &p.UpdatedAt)
 	if err != nil {
-		if err.Error() == "sql: no rows in result set" {
+		if err == sql.ErrNoRows {
 			// No profile exists yet — insert
 			err = r.DB.QueryRow(`
 				INSERT INTO baby_profile (date_of_birth, name, gender, milk_type) VALUES ($1, $2, $3, $4)
@@ -525,11 +571,12 @@ func toNullString(s string) sql.NullString {
 }
 
 func (r *PostgresRepository) GetDevelopmentCache(weekNumber int) (*DevelopmentContent, error) {
+	defer ObserveDBQuery("GetDevelopmentCache", time.Now())
 	var c DevelopmentContent
 	err := r.DB.QueryRow(`SELECT id, week_number, content, created_at, updated_at FROM development_cache WHERE week_number = $1`, weekNumber).
 		Scan(&c.ID, &c.WeekNumber, &c.Content, &c.CreatedAt, &c.UpdatedAt)
 	if err != nil {
-		if err.Error() == "sql: no rows in result set" {
+		if err == sql.ErrNoRows {
 			return nil, nil
 		}
 		return nil, err
@@ -538,6 +585,7 @@ func (r *PostgresRepository) GetDevelopmentCache(weekNumber int) (*DevelopmentCo
 }
 
 func (r *PostgresRepository) SaveDevelopmentCache(weekNumber int, content string) error {
+	defer ObserveDBQuery("SaveDevelopmentCache", time.Now())
 	_, err := r.DB.Exec(`
 		INSERT INTO development_cache (week_number, content) VALUES ($1, $2)
 		ON CONFLICT (week_number) DO UPDATE SET content = $2, updated_at = NOW()`,
@@ -548,6 +596,7 @@ func (r *PostgresRepository) SaveDevelopmentCache(weekNumber int, content string
 // ── Growth measurement methods ──
 
 func (r *PostgresRepository) GetGrowthMeasurements(limit int) ([]GrowthMeasurement, error) {
+	defer ObserveDBQuery("GetGrowthMeasurements", time.Now())
 	if limit <= 0 {
 		limit = 50
 	}
@@ -562,6 +611,7 @@ func (r *PostgresRepository) GetGrowthMeasurements(limit int) ([]GrowthMeasureme
 }
 
 func (r *PostgresRepository) GetGrowthMeasurementsByRange(from, to time.Time) ([]GrowthMeasurement, error) {
+	defer ObserveDBQuery("GetGrowthMeasurementsByRange", time.Now())
 	rows, err := r.DB.Query(
 		`SELECT id, date, weight_kg, length_cm, head_circumference_cm, notes, created_at, updated_at
 		 FROM growth_measurements WHERE date >= $1 AND date <= $2 ORDER BY date`, from, to)
@@ -573,6 +623,7 @@ func (r *PostgresRepository) GetGrowthMeasurementsByRange(from, to time.Time) ([
 }
 
 func (r *PostgresRepository) GetLatestGrowthMeasurement() (*GrowthMeasurement, error) {
+	defer ObserveDBQuery("GetLatestGrowthMeasurement", time.Now())
 	var g GrowthMeasurement
 	var headCirc sql.NullFloat64
 	var notes sql.NullString
@@ -596,6 +647,7 @@ func (r *PostgresRepository) GetLatestGrowthMeasurement() (*GrowthMeasurement, e
 }
 
 func (r *PostgresRepository) CreateGrowthMeasurement(input GrowthMeasurementInput) (GrowthMeasurement, error) {
+	defer ObserveDBQuery("CreateGrowthMeasurement", time.Now())
 	var g GrowthMeasurement
 	var headCirc sql.NullFloat64
 	var notesScan sql.NullString
@@ -621,6 +673,7 @@ func (r *PostgresRepository) CreateGrowthMeasurement(input GrowthMeasurementInpu
 }
 
 func (r *PostgresRepository) UpdateGrowthMeasurement(id int, input GrowthMeasurementInput) (GrowthMeasurement, error) {
+	defer ObserveDBQuery("UpdateGrowthMeasurement", time.Now())
 	var g GrowthMeasurement
 	var headCirc sql.NullFloat64
 	var notesScan sql.NullString
@@ -649,6 +702,7 @@ func (r *PostgresRepository) UpdateGrowthMeasurement(id int, input GrowthMeasure
 }
 
 func (r *PostgresRepository) DeleteGrowthMeasurement(id int) error {
+	defer ObserveDBQuery("DeleteGrowthMeasurement", time.Now())
 	result, err := r.DB.Exec(`DELETE FROM growth_measurements WHERE id=$1`, id)
 	if err != nil {
 		return err
@@ -686,6 +740,7 @@ func scanGrowthRows(rows *sql.Rows) ([]GrowthMeasurement, error) {
 // ── Insight cache methods ──
 
 func (r *PostgresRepository) GetInsightCache(key string) (*InsightCache, error) {
+	defer ObserveDBQuery("GetInsightCache", time.Now())
 	var c InsightCache
 	err := r.DB.QueryRow(
 		`SELECT id, cache_key, content, expires_at, created_at FROM insights_cache
@@ -701,6 +756,7 @@ func (r *PostgresRepository) GetInsightCache(key string) (*InsightCache, error) 
 }
 
 func (r *PostgresRepository) SaveInsightCache(key, content string, expiresAt time.Time) error {
+	defer ObserveDBQuery("SaveInsightCache", time.Now())
 	_, err := r.DB.Exec(`
 		INSERT INTO insights_cache (cache_key, content, expires_at) VALUES ($1, $2, $3)
 		ON CONFLICT (cache_key) DO UPDATE SET content = $2, expires_at = $3, created_at = NOW()`,
@@ -709,6 +765,7 @@ func (r *PostgresRepository) SaveInsightCache(key, content string, expiresAt tim
 }
 
 func (r *PostgresRepository) InvalidateInsightCache() error {
+	defer ObserveDBQuery("InvalidateInsightCache", time.Now())
 	_, err := r.DB.Exec(`DELETE FROM insights_cache`)
 	return err
 }
@@ -716,6 +773,7 @@ func (r *PostgresRepository) InvalidateInsightCache() error {
 // ── Aggregation methods for insights ──
 
 func (r *PostgresRepository) GetFeedingDailyAvg(days int) (int, error) {
+	defer ObserveDBQuery("GetFeedingDailyAvg", time.Now())
 	if days <= 0 {
 		days = 7
 	}
@@ -724,8 +782,8 @@ func (r *PostgresRepository) GetFeedingDailyAvg(days int) (int, error) {
 		SELECT AVG(daily_total) FROM (
 			SELECT SUM(amount_ml) AS daily_total
 			FROM feedings
-			WHERE start_time >= NOW() - INTERVAL '1 day' * $1
-			GROUP BY start_time::date
+			WHERE end_time >= NOW() - INTERVAL '1 day' * $1
+			GROUP BY end_time::date
 		) sub`, days).Scan(&avg)
 	if err != nil {
 		return 0, err
@@ -737,6 +795,7 @@ func (r *PostgresRepository) GetFeedingDailyAvg(days int) (int, error) {
 }
 
 func (r *PostgresRepository) GetSleepDailyAvg(days int) (int, error) {
+	defer ObserveDBQuery("GetSleepDailyAvg", time.Now())
 	if days <= 0 {
 		days = 7
 	}
@@ -760,6 +819,7 @@ func (r *PostgresRepository) GetSleepDailyAvg(days int) (int, error) {
 // ── Diaper methods ──
 
 func (r *PostgresRepository) GetDiapers(dateFilter string, tz string) ([]Diaper, error) {
+	defer ObserveDBQuery("GetDiapers", time.Now())
 	if tz == "" {
 		tz = "UTC"
 	}
@@ -792,9 +852,13 @@ func (r *PostgresRepository) GetDiapers(dateFilter string, tz string) ([]Diaper,
 }
 
 func (r *PostgresRepository) CreateDiaper(input DiaperInput) (Diaper, error) {
-	t, _ := time.Parse(time.RFC3339, input.Time)
+	defer ObserveDBQuery("CreateDiaper", time.Now())
+	t, err := time.Parse(time.RFC3339, input.Time)
+	if err != nil {
+		return Diaper{}, fmt.Errorf("invalid time: %w", err)
+	}
 	var d Diaper
-	err := r.DB.QueryRow(
+	err = r.DB.QueryRow(
 		`INSERT INTO diapers (type, time) VALUES ($1, $2)
 		 RETURNING id, type, time, created_at, updated_at`,
 		input.Type, t,
@@ -803,9 +867,13 @@ func (r *PostgresRepository) CreateDiaper(input DiaperInput) (Diaper, error) {
 }
 
 func (r *PostgresRepository) UpdateDiaper(id int, input DiaperInput) (Diaper, error) {
-	t, _ := time.Parse(time.RFC3339, input.Time)
+	defer ObserveDBQuery("UpdateDiaper", time.Now())
+	t, err := time.Parse(time.RFC3339, input.Time)
+	if err != nil {
+		return Diaper{}, fmt.Errorf("invalid time: %w", err)
+	}
 	var d Diaper
-	err := r.DB.QueryRow(
+	err = r.DB.QueryRow(
 		`UPDATE diapers SET type=$1, time=$2, updated_at=NOW()
 		 WHERE id=$3
 		 RETURNING id, type, time, created_at, updated_at`,
@@ -818,6 +886,7 @@ func (r *PostgresRepository) UpdateDiaper(id int, input DiaperInput) (Diaper, er
 }
 
 func (r *PostgresRepository) DeleteDiaper(id int) error {
+	defer ObserveDBQuery("DeleteDiaper", time.Now())
 	result, err := r.DB.Exec(`DELETE FROM diapers WHERE id=$1`, id)
 	if err != nil {
 		return err
@@ -835,6 +904,7 @@ func (r *PostgresRepository) DeleteDiaper(id int) error {
 // ── Bath methods ──
 
 func (r *PostgresRepository) GetBaths(dateFilter string, tz string) ([]Bath, error) {
+	defer ObserveDBQuery("GetBaths", time.Now())
 	if tz == "" {
 		tz = "UTC"
 	}
@@ -867,9 +937,13 @@ func (r *PostgresRepository) GetBaths(dateFilter string, tz string) ([]Bath, err
 }
 
 func (r *PostgresRepository) CreateBath(input BathInput) (Bath, error) {
-	t, _ := time.Parse(time.RFC3339, input.Time)
+	defer ObserveDBQuery("CreateBath", time.Now())
+	t, err := time.Parse(time.RFC3339, input.Time)
+	if err != nil {
+		return Bath{}, fmt.Errorf("invalid time: %w", err)
+	}
 	var b Bath
-	err := r.DB.QueryRow(
+	err = r.DB.QueryRow(
 		`INSERT INTO baths (time) VALUES ($1)
 		 RETURNING id, time, created_at, updated_at`,
 		t,
@@ -878,9 +952,13 @@ func (r *PostgresRepository) CreateBath(input BathInput) (Bath, error) {
 }
 
 func (r *PostgresRepository) UpdateBath(id int, input BathInput) (Bath, error) {
-	t, _ := time.Parse(time.RFC3339, input.Time)
+	defer ObserveDBQuery("UpdateBath", time.Now())
+	t, err := time.Parse(time.RFC3339, input.Time)
+	if err != nil {
+		return Bath{}, fmt.Errorf("invalid time: %w", err)
+	}
 	var b Bath
-	err := r.DB.QueryRow(
+	err = r.DB.QueryRow(
 		`UPDATE baths SET time=$1, updated_at=NOW()
 		 WHERE id=$2
 		 RETURNING id, time, created_at, updated_at`,
@@ -893,6 +971,7 @@ func (r *PostgresRepository) UpdateBath(id int, input BathInput) (Bath, error) {
 }
 
 func (r *PostgresRepository) DeleteBath(id int) error {
+	defer ObserveDBQuery("DeleteBath", time.Now())
 	result, err := r.DB.Exec(`DELETE FROM baths WHERE id=$1`, id)
 	if err != nil {
 		return err

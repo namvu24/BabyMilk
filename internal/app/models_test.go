@@ -7,9 +7,8 @@ import (
 
 func TestFeedingInput_Validate_Valid(t *testing.T) {
 	input := FeedingInput{
-		AmountML:  100,
-		StartTime: "2025-01-15T08:00:00Z",
-		EndTime:   "2025-01-15T08:15:00Z",
+		AmountML: 100,
+		EndTime:  "2025-01-15T08:15:00Z",
 	}
 	if err := input.Validate(); err != nil {
 		t.Errorf("expected no error, got %v", err)
@@ -18,9 +17,8 @@ func TestFeedingInput_Validate_Valid(t *testing.T) {
 
 func TestFeedingInput_Validate_MinAmount(t *testing.T) {
 	input := FeedingInput{
-		AmountML:  1,
-		StartTime: "2025-01-15T08:00:00Z",
-		EndTime:   "2025-01-15T08:15:00Z",
+		AmountML: 1,
+		EndTime:  "2025-01-15T08:15:00Z",
 	}
 	if err := input.Validate(); err != nil {
 		t.Errorf("expected amount_ml=1 to be valid, got %v", err)
@@ -29,9 +27,8 @@ func TestFeedingInput_Validate_MinAmount(t *testing.T) {
 
 func TestFeedingInput_Validate_ZeroAmount(t *testing.T) {
 	input := FeedingInput{
-		AmountML:  0,
-		StartTime: "2025-01-15T08:00:00Z",
-		EndTime:   "2025-01-15T08:15:00Z",
+		AmountML: 0,
+		EndTime:  "2025-01-15T08:15:00Z",
 	}
 	if err := input.Validate(); err == nil {
 		t.Error("expected error for amount_ml=0")
@@ -40,59 +37,22 @@ func TestFeedingInput_Validate_ZeroAmount(t *testing.T) {
 
 func TestFeedingInput_Validate_NegativeAmount(t *testing.T) {
 	input := FeedingInput{
-		AmountML:  -10,
-		StartTime: "2025-01-15T08:00:00Z",
-		EndTime:   "2025-01-15T08:15:00Z",
+		AmountML: -10,
+		EndTime:  "2025-01-15T08:15:00Z",
 	}
 	if err := input.Validate(); err == nil {
 		t.Error("expected error for negative amount_ml")
 	}
 }
 
-func TestFeedingInput_Validate_InvalidStartTime(t *testing.T) {
-	input := FeedingInput{
-		AmountML:  100,
-		StartTime: "not-a-date",
-		EndTime:   "2025-01-15T08:15:00Z",
-	}
-	err := input.Validate()
-	if err == nil {
-		t.Error("expected error for invalid start_time")
-	}
-}
-
 func TestFeedingInput_Validate_InvalidEndTime(t *testing.T) {
 	input := FeedingInput{
-		AmountML:  100,
-		StartTime: "2025-01-15T08:00:00Z",
-		EndTime:   "not-a-date",
+		AmountML: 100,
+		EndTime:  "not-a-date",
 	}
 	err := input.Validate()
 	if err == nil {
 		t.Error("expected error for invalid end_time")
-	}
-}
-
-func TestFeedingInput_Validate_EndBeforeStart(t *testing.T) {
-	input := FeedingInput{
-		AmountML:  100,
-		StartTime: "2025-01-15T08:15:00Z",
-		EndTime:   "2025-01-15T08:00:00Z",
-	}
-	err := input.Validate()
-	if err == nil {
-		t.Error("expected error when end_time is before start_time")
-	}
-}
-
-func TestFeedingInput_Validate_EndEqualsStart(t *testing.T) {
-	input := FeedingInput{
-		AmountML:  100,
-		StartTime: "2025-01-15T08:00:00Z",
-		EndTime:   "2025-01-15T08:00:00Z",
-	}
-	if err := input.Validate(); err != nil {
-		t.Errorf("expected end_time equal to start_time to be valid, got %v", err)
 	}
 }
 
@@ -447,13 +407,16 @@ func TestSleepInput_Validate_DefaultSleepType(t *testing.T) {
 	}
 }
 
-func TestSleepInput_Validate_DurationTooLong(t *testing.T) {
+func TestSleepInput_Validate_LongDurationAllowed(t *testing.T) {
+	// Sleeps longer than 24h are now valid — the old limit was removed
+	// because users couldn't stop sessions they forgot to end.
 	now := time.Now()
 	input := SleepInput{
 		StartTime: now.Format(time.RFC3339),
 		EndTime:   now.Add(25 * time.Hour).Format(time.RFC3339),
+		SleepType: "night",
 	}
-	if err := input.Validate(); err == nil {
-		t.Error("expected error for duration > 24h")
+	if err := input.Validate(); err != nil {
+		t.Errorf("expected sleep > 24h to be valid, got error: %v", err)
 	}
 }

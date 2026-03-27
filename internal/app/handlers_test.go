@@ -84,7 +84,6 @@ func (m *mockRepository) CreateFeeding(input FeedingInput) (Feeding, error) {
 	f := Feeding{
 		ID:        1,
 		AmountML:  input.AmountML,
-		StartTime: time.Now(),
 		EndTime:   time.Now(),
 		CreatedAt: time.Now(),
 		UpdatedAt: time.Now(),
@@ -101,7 +100,6 @@ func (m *mockRepository) UpdateFeeding(id int, input FeedingInput) (Feeding, err
 	f := Feeding{
 		ID:        id,
 		AmountML:  input.AmountML,
-		StartTime: time.Now(),
 		EndTime:   time.Now(),
 		CreatedAt: time.Now(),
 		UpdatedAt: time.Now(),
@@ -240,9 +238,11 @@ func (m *mockRepository) StopSleep(id int, input SleepStopInput) (Sleep, error) 
 	}
 	et, _ := time.Parse(time.RFC3339, input.EndTime)
 	now := time.Now()
+	// Mock a start time that makes this stop valid
+	st := et.Add(-time.Hour)
 	return Sleep{
 		ID:        id,
-		StartTime: now.Add(-time.Hour),
+		StartTime: st,
 		EndTime:   &et,
 		SleepType: "nap",
 		Status:    "completed",
@@ -403,7 +403,7 @@ func (m *mockRepository) GetSleepDailyAvg(days int) (int, error) {
 }
 
 func validFeedingJSON() string {
-	return `{"amount_ml":120,"start_time":"2025-01-15T08:00:00Z","end_time":"2025-01-15T08:15:00Z"}`
+	return `{"amount_ml":120,"end_time":"2025-01-15T08:15:00Z"}`
 }
 
 // --- HandleFeedings tests ---
@@ -512,7 +512,7 @@ func TestHandleFeedings_POST_ValidationError(t *testing.T) {
 	mock := &mockRepository{}
 	srv := NewServer(mock)
 
-	body := strings.NewReader(`{"amount_ml":0,"start_time":"2025-01-15T08:00:00Z","end_time":"2025-01-15T08:15:00Z"}`)
+	body := strings.NewReader(`{"amount_ml":0,"end_time":"2025-01-15T08:15:00Z"}`)
 	req := httptest.NewRequest(http.MethodPost, "/api/feedings", body)
 	w := httptest.NewRecorder()
 	srv.HandleFeedings(w, req)
@@ -586,7 +586,7 @@ func TestHandleFeedingByID_PUT_ValidationError(t *testing.T) {
 	mock := &mockRepository{}
 	srv := NewServer(mock)
 
-	body := strings.NewReader(`{"amount_ml":-1,"start_time":"2025-01-15T08:00:00Z","end_time":"2025-01-15T08:15:00Z"}`)
+	body := strings.NewReader(`{"amount_ml":-1,"end_time":"2025-01-15T08:15:00Z"}`)
 	req := httptest.NewRequest(http.MethodPut, "/api/feedings/1", body)
 	w := httptest.NewRecorder()
 	srv.HandleFeedingByID(w, req)

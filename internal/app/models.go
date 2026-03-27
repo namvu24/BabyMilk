@@ -12,19 +12,19 @@ var ErrNotFound = errors.New("not found")
 // ErrConflict is returned when a resource conflict prevents the operation.
 var ErrConflict = errors.New("conflict")
 
+// ── Feeding models ──
+
 type Feeding struct {
 	ID        int       `json:"id"`
 	AmountML  int       `json:"amount_ml"`
-	StartTime time.Time `json:"start_time"`
 	EndTime   time.Time `json:"end_time"`
 	CreatedAt time.Time `json:"created_at"`
 	UpdatedAt time.Time `json:"updated_at"`
 }
 
 type FeedingInput struct {
-	AmountML  int    `json:"amount_ml"`
-	StartTime string `json:"start_time"`
-	EndTime   string `json:"end_time"`
+	AmountML int    `json:"amount_ml"`
+	EndTime  string `json:"end_time"`
 }
 
 type DailyTotal struct {
@@ -36,16 +36,9 @@ func (f *FeedingInput) Validate() error {
 	if f.AmountML <= 0 {
 		return fmt.Errorf("amount_ml must be greater than 0")
 	}
-	start, err := time.Parse(time.RFC3339, f.StartTime)
-	if err != nil {
-		return fmt.Errorf("invalid start_time format, use RFC3339")
-	}
-	end, err := time.Parse(time.RFC3339, f.EndTime)
+	_, err := time.Parse(time.RFC3339, f.EndTime)
 	if err != nil {
 		return fmt.Errorf("invalid end_time format, use RFC3339")
-	}
-	if end.Before(start) {
-		return fmt.Errorf("end_time must not be before start_time")
 	}
 	return nil
 }
@@ -74,7 +67,7 @@ type DailySleepTotal struct {
 }
 
 func (s *SleepInput) Validate() error {
-	_, err := time.Parse(time.RFC3339, s.StartTime)
+	start, err := time.Parse(time.RFC3339, s.StartTime)
 	if err != nil {
 		return fmt.Errorf("invalid start_time format, use RFC3339")
 	}
@@ -85,13 +78,8 @@ func (s *SleepInput) Validate() error {
 	if err != nil {
 		return fmt.Errorf("invalid end_time format, use RFC3339")
 	}
-	start, _ := time.Parse(time.RFC3339, s.StartTime)
 	if end.Before(start) {
 		return fmt.Errorf("end_time must not be before start_time")
-	}
-	dur := end.Sub(start)
-	if dur > 24*time.Hour {
-		return fmt.Errorf("sleep duration cannot exceed 24 hours")
 	}
 	if s.SleepType == "" {
 		s.SleepType = "nap"
@@ -310,15 +298,15 @@ type GrowthAssessment struct {
 }
 
 type FeedingAnalysis struct {
-	DailyAvgML      int    `json:"daily_avg_ml"`
-	RecommendedML   int    `json:"recommended_ml"`
-	MilkTypeGuidance string `json:"milk_type_guidance"`
-	Recommendations []string `json:"recommendations"`
+	DailyAvgML       int      `json:"daily_avg_ml"`
+	RecommendedML    int      `json:"recommended_ml"`
+	MilkTypeGuidance string   `json:"milk_type_guidance"`
+	Recommendations  []string `json:"recommendations"`
 }
 
 type SleepAnalysis struct {
-	DailyAvgMinutes    int    `json:"daily_avg_minutes"`
-	RecommendedMinutes int    `json:"recommended_minutes"`
+	DailyAvgMinutes     int    `json:"daily_avg_minutes"`
+	RecommendedMinutes  int    `json:"recommended_minutes"`
 	PatternObservations string `json:"pattern_observations"`
 }
 

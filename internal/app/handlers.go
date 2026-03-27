@@ -114,6 +114,7 @@ func (s *Server) createFeeding(w http.ResponseWriter, r *http.Request) {
 		respondError(w, http.StatusInternalServerError, err.Error())
 		return
 	}
+	RecordEntityOp("feeding", "create")
 	_ = s.Repo.InvalidateInsightCache()
 	respondJSON(w, http.StatusCreated, feeding)
 }
@@ -137,6 +138,7 @@ func (s *Server) updateFeeding(w http.ResponseWriter, r *http.Request, id int) {
 		respondError(w, http.StatusInternalServerError, err.Error())
 		return
 	}
+	RecordEntityOp("feeding", "update")
 	_ = s.Repo.InvalidateInsightCache()
 	respondJSON(w, http.StatusOK, feeding)
 }
@@ -150,6 +152,7 @@ func (s *Server) deleteFeeding(w http.ResponseWriter, r *http.Request, id int) {
 		}
 		return
 	}
+	RecordEntityOp("feeding", "delete")
 	_ = s.Repo.InvalidateInsightCache()
 	w.WriteHeader(http.StatusNoContent)
 }
@@ -286,6 +289,7 @@ func (s *Server) createSleep(w http.ResponseWriter, r *http.Request) {
 		respondError(w, http.StatusInternalServerError, err.Error())
 		return
 	}
+	RecordEntityOp("sleep", "create")
 	_ = s.Repo.InvalidateInsightCache()
 	respondJSON(w, http.StatusCreated, sleep)
 }
@@ -309,6 +313,7 @@ func (s *Server) updateSleep(w http.ResponseWriter, r *http.Request, id int) {
 		respondError(w, http.StatusInternalServerError, err.Error())
 		return
 	}
+	RecordEntityOp("sleep", "update")
 	_ = s.Repo.InvalidateInsightCache()
 	respondJSON(w, http.StatusOK, sleep)
 }
@@ -322,6 +327,7 @@ func (s *Server) deleteSleep(w http.ResponseWriter, r *http.Request, id int) {
 		}
 		return
 	}
+	RecordEntityOp("sleep", "delete")
 	_ = s.Repo.InvalidateInsightCache()
 	w.WriteHeader(http.StatusNoContent)
 }
@@ -458,13 +464,13 @@ func (s *Server) stopSleep(w http.ResponseWriter, r *http.Request, id int) {
 		respondError(w, http.StatusNotFound, "active sleep not found")
 		return
 	}
-	endTime, _ := time.Parse(time.RFC3339, input.EndTime)
-	if !endTime.After(active.StartTime) {
-		respondError(w, http.StatusBadRequest, "end_time must be after start_time")
+	endTime, err := time.Parse(time.RFC3339, input.EndTime)
+	if err != nil {
+		respondError(w, http.StatusBadRequest, "invalid end_time format")
 		return
 	}
-	if endTime.Sub(active.StartTime) > 24*time.Hour {
-		respondError(w, http.StatusBadRequest, "sleep duration cannot exceed 24 hours")
+	if !endTime.After(active.StartTime) {
+		respondError(w, http.StatusBadRequest, "end_time must be after start_time")
 		return
 	}
 	sleep, err := s.Repo.StopSleep(id, input)
@@ -694,6 +700,7 @@ func (s *Server) createGrowthMeasurement(w http.ResponseWriter, r *http.Request)
 		respondError(w, http.StatusInternalServerError, err.Error())
 		return
 	}
+	RecordEntityOp("growth", "create")
 	_ = s.Repo.InvalidateInsightCache()
 	respondJSON(w, http.StatusCreated, measurement)
 }
@@ -717,6 +724,7 @@ func (s *Server) updateGrowthMeasurement(w http.ResponseWriter, r *http.Request,
 		respondError(w, http.StatusInternalServerError, err.Error())
 		return
 	}
+	RecordEntityOp("growth", "update")
 	_ = s.Repo.InvalidateInsightCache()
 	respondJSON(w, http.StatusOK, measurement)
 }
@@ -730,6 +738,7 @@ func (s *Server) deleteGrowthMeasurement(w http.ResponseWriter, r *http.Request,
 		}
 		return
 	}
+	RecordEntityOp("growth", "delete")
 	_ = s.Repo.InvalidateInsightCache()
 	w.WriteHeader(http.StatusNoContent)
 }
@@ -932,6 +941,7 @@ func (s *Server) createDiaper(w http.ResponseWriter, r *http.Request) {
 		respondError(w, http.StatusInternalServerError, err.Error())
 		return
 	}
+	RecordEntityOp("diaper", "create")
 	respondJSON(w, http.StatusCreated, diaper)
 }
 
@@ -954,6 +964,7 @@ func (s *Server) updateDiaper(w http.ResponseWriter, r *http.Request, id int) {
 		respondError(w, http.StatusInternalServerError, err.Error())
 		return
 	}
+	RecordEntityOp("diaper", "update")
 	respondJSON(w, http.StatusOK, diaper)
 }
 
@@ -966,6 +977,7 @@ func (s *Server) deleteDiaper(w http.ResponseWriter, r *http.Request, id int) {
 		}
 		return
 	}
+	RecordEntityOp("diaper", "delete")
 	w.WriteHeader(http.StatusNoContent)
 }
 
@@ -1036,6 +1048,7 @@ func (s *Server) createBath(w http.ResponseWriter, r *http.Request) {
 		respondError(w, http.StatusInternalServerError, err.Error())
 		return
 	}
+	RecordEntityOp("bath", "create")
 	respondJSON(w, http.StatusCreated, bath)
 }
 
@@ -1058,6 +1071,7 @@ func (s *Server) updateBath(w http.ResponseWriter, r *http.Request, id int) {
 		respondError(w, http.StatusInternalServerError, err.Error())
 		return
 	}
+	RecordEntityOp("bath", "update")
 	respondJSON(w, http.StatusOK, bath)
 }
 
@@ -1070,5 +1084,6 @@ func (s *Server) deleteBath(w http.ResponseWriter, r *http.Request, id int) {
 		}
 		return
 	}
+	RecordEntityOp("bath", "delete")
 	w.WriteHeader(http.StatusNoContent)
 }
