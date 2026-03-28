@@ -71,7 +71,6 @@ function toggleFeeding() {
         // START
         feedingStartTime = new Date();
         document.getElementById('feedingDate').value = toLocalDate(feedingStartTime);
-        document.getElementById('startTime').value = toLocalTime(feedingStartTime);
         document.getElementById('endTime').value = toLocalTime(feedingStartTime);
 
         btn.textContent = '⏹ Stop Feeding';
@@ -109,13 +108,7 @@ function toggleFeeding() {
 function setDefaultTimes() {
     const now = new Date();
     document.getElementById('feedingDate').value = toLocalDate(now);
-    document.getElementById('startTime').value = toLocalTime(now);
     document.getElementById('endTime').value = toLocalTime(now);
-}
-
-// Set end time = start time ("Set" button)
-function setEndTimeFromStart() {
-    document.getElementById('endTime').value = document.getElementById('startTime').value;
 }
 
 document.addEventListener('DOMContentLoaded', () => {
@@ -135,7 +128,7 @@ document.addEventListener('DOMContentLoaded', () => {
     });
 
     // Snap time inputs to nearest 5 minutes on change
-    ['startTime', 'endTime'].forEach(id => {
+    ['endTime'].forEach(id => {
         document.getElementById(id).addEventListener('change', (e) => {
             const val = e.target.value; // "HH:MM"
             if (val) {
@@ -155,7 +148,6 @@ document.addEventListener('DOMContentLoaded', () => {
             editFeeding(
                 parseInt(editBtn.dataset.editId),
                 parseInt(editBtn.dataset.amount),
-                decodeURIComponent(editBtn.dataset.start),
                 decodeURIComponent(editBtn.dataset.end)
             );
             return;
@@ -359,7 +351,7 @@ function renderFeedings(feedings) {
     // Group by local date string
     const groups = {};
     feedings.forEach(f => {
-        const day = new Date(f.start_time).toLocaleDateString(undefined, { weekday: 'short', year: 'numeric', month: 'short', day: 'numeric' });
+        const day = new Date(f.end_time).toLocaleDateString(undefined, { weekday: 'short', year: 'numeric', month: 'short', day: 'numeric' });
         if (!groups[day]) groups[day] = [];
         groups[day].push(f);
     });
@@ -371,20 +363,19 @@ function renderFeedings(feedings) {
         const items = groups[day];
         const dayTotal = items.reduce((s, f) => s + f.amount_ml, 0);
         const rows = items.map((f, idx) => {
-            const startISO = encodeURIComponent(f.start_time);
             const endISO = encodeURIComponent(f.end_time);
             let gapHtml = '';
             if (idx > 0) {
                 const prevEnd = new Date(items[idx - 1].end_time);
-                const currStart = new Date(f.start_time);
-                gapHtml = buildTimeGapRow(prevEnd, currStart, 3);
+                const currEnd = new Date(f.end_time);
+                gapHtml = buildTimeGapRow(prevEnd, currEnd, 3);
             }
             return `${gapHtml}
             <tr class="feeding-row">
-                <td class="text-nowrap">${formatTime(f.start_time)} – ${formatTime(f.end_time)}</td>
+                <td class="text-nowrap">${formatTime(f.end_time)}</td>
                 <td><span class="badge bg-primary rounded-pill">${f.amount_ml} ml</span></td>
                 <td class="text-end text-nowrap">
-                    <button class="btn btn-sm btn-outline-primary py-0 px-2" data-edit-id="${Number(f.id)}" data-amount="${Number(f.amount_ml)}" data-start="${startISO}" data-end="${endISO}">✏️</button>
+                    <button class="btn btn-sm btn-outline-primary py-0 px-2" data-edit-id="${Number(f.id)}" data-amount="${Number(f.amount_ml)}" data-end="${endISO}">✏️</button>
                     <button class="btn btn-sm btn-outline-danger py-0 px-2" data-delete-id="${Number(f.id)}">🗑</button>
                 </td>
             </tr>
@@ -414,7 +405,6 @@ async function handleSubmit(e) {
     const date = document.getElementById('feedingDate').value;
     const data = {
         amount_ml: parseInt(document.getElementById('amountMl').value),
-        start_time: toRFC3339(date + 'T' + document.getElementById('startTime').value),
         end_time: toRFC3339(date + 'T' + document.getElementById('endTime').value),
     };
 
@@ -445,12 +435,11 @@ async function handleSubmit(e) {
 
 // ── Edit mode ──
 // Populate form with existing feeding data for editing
-function editFeeding(id, amount, startTime, endTime) {
+function editFeeding(id, amount, endTime) {
     document.getElementById('editId').value = id;
     document.getElementById('amountMl').value = amount;
     document.getElementById('amountSlider').value = amount;
-    document.getElementById('feedingDate').value = toLocalDate(new Date(startTime));
-    document.getElementById('startTime').value = toLocalTime(new Date(startTime));
+    document.getElementById('feedingDate').value = toLocalDate(new Date(endTime));
     document.getElementById('endTime').value = toLocalTime(new Date(endTime));
     document.getElementById('formTitle').textContent = 'Edit Feeding';
     document.getElementById('submitBtn').textContent = 'Update';
@@ -574,10 +563,6 @@ function renderChart(totals) {
             maintainAspectRatio: false,
             layout: { padding: { top: 24 } },
             scales: {
-                y: {
-                    beginAtZero: true,
-                    title: { display: true, text: 'Milliliters (ml)' },
-                },
                 x: {
                     title: { display: true, text: 'Day' },
                 },
