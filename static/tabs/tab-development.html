@@ -1,0 +1,125 @@
+<!-- DOB Setup (shown when no profile exists) -->
+<div id="dobSetup" class="card mb-4">
+    <div class="card-body text-center">
+        <h5 class="card-title">👶 Set Baby's Profile</h5>
+        <p class="text-muted">Enter your baby's details to get personalized development information powered by AI.</p>
+        <div class="row justify-content-center g-3">
+            <div class="col-auto">
+                <label for="babyDob" class="form-label">Date of Birth</label>
+                <input type="date" class="form-control" id="babyDob" required>
+            </div>
+            <div class="col-auto">
+                <label for="babyName" class="form-label">Name (optional)</label>
+                <input type="text" class="form-control" id="babyName" placeholder="Baby's name">
+            </div>
+            <div class="col-auto">
+                <label class="form-label">Gender</label>
+                <div class="d-flex gap-3 mt-1">
+                    <div class="form-check">
+                        <input class="form-check-input" type="radio" name="babyGender" id="genderMale" value="male">
+                        <label class="form-check-label" for="genderMale">👦 Boy</label>
+                    </div>
+                    <div class="form-check">
+                        <input class="form-check-input" type="radio" name="babyGender" id="genderFemale" value="female">
+                        <label class="form-check-label" for="genderFemale">👧 Girl</label>
+                    </div>
+                </div>
+            </div>
+            <div class="col-auto">
+                <label for="babyMilkType" class="form-label">Milk Type</label>
+                <select class="form-select" id="babyMilkType">
+                    <option value="formula">🍼 Formula</option>
+                    <option value="breast">🤱 Breast</option>
+                    <option value="mixed">🔄 Mixed</option>
+                </select>
+            </div>
+            <div class="col-12">
+                <button class="btn btn-dev" onclick="saveBabyProfile()">Save</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Wonder week status banner -->
+<div id="wonderWeekBanner" class="d-none mb-4">
+    <div id="wonderWeekBannerContent" class="d-flex align-items-center gap-2 rounded p-3" role="status"></div>
+</div>
+
+<!-- Baby age info bar (shown when profile exists) -->
+<div id="babyInfoBar" class="card mb-4 d-none">
+    <div class="card-body">
+        <div class="d-flex justify-content-between align-items-center flex-wrap gap-2">
+            <div>
+                <span class="fs-5 fw-bold" id="babyAgeDisplay"></span>
+                <br><small class="text-muted" id="babyDobDisplay"></small>
+            </div>
+            <div class="d-flex align-items-center gap-1">
+                <button class="btn btn-outline-secondary btn-sm px-2" onclick="switchWeek(-1)" title="Previous week">◀</button>
+                <span class="badge bg-dev fs-6 px-3 py-2" id="weekBadge">Week 0</span>
+                <button class="btn btn-outline-secondary btn-sm px-2" onclick="switchWeek(1)" title="Next week">▶</button>
+            </div>
+            <button class="btn btn-outline-secondary btn-sm" onclick="editBabyDob()" title="Change DOB">✏️ Edit DOB</button>
+        </div>
+    </div>
+</div>
+
+<!-- Loading spinner -->
+<div id="devLoading" class="text-center py-5 d-none">
+    <div class="spinner-border text-secondary" role="status" style="width:3rem;height:3rem"></div>
+    <p class="text-muted mt-3">Generating development content with AI...<br><small>This may take a moment for the first load</small></p>
+</div>
+
+<!-- Error state -->
+<div id="devError" class="alert alert-warning d-none" role="alert">
+    <strong>⚠️ Unable to load content</strong>
+    <p id="devErrorMsg" class="mb-0 mt-1"></p>
+</div>
+
+<!-- Development content (4 sections) -->
+<div id="devContent" class="d-none">
+
+    <!-- Behaviors -->
+    <div class="card mb-3 dev-card">
+        <div class="card-header bg-dev text-white d-flex justify-content-between align-items-center" role="button" data-bs-toggle="collapse" data-bs-target="#behaviorCollapse">
+            <h6 class="mb-0">🧠 Expected Behaviors</h6>
+            <span class="collapse-icon">▼</span>
+        </div>
+        <div id="behaviorCollapse" class="collapse show">
+            <div class="card-body" id="behaviorsContent"></div>
+        </div>
+    </div>
+
+    <!-- Milestones -->
+    <div class="card mb-3 dev-card">
+        <div class="card-header bg-dev text-white d-flex justify-content-between align-items-center" role="button" data-bs-toggle="collapse" data-bs-target="#milestoneCollapse">
+            <h6 class="mb-0">🏆 Milestones & Development</h6>
+            <span class="collapse-icon">▼</span>
+        </div>
+        <div id="milestoneCollapse" class="collapse show">
+            <div class="card-body" id="milestonesContent"></div>
+        </div>
+    </div>
+
+    <!-- Wonder Weeks -->
+    <div class="card mb-3 dev-card">
+        <div class="card-header bg-dev text-white d-flex justify-content-between align-items-center" role="button" data-bs-toggle="collapse" data-bs-target="#wonderCollapse">
+            <h6 class="mb-0">🌟 Wonder Weeks</h6>
+            <span class="collapse-icon">▼</span>
+        </div>
+        <div id="wonderCollapse" class="collapse show">
+            <div class="card-body" id="wonderWeekContent"></div>
+        </div>
+    </div>
+
+    <!-- Exercises -->
+    <div class="card mb-3 dev-card">
+        <div class="card-header bg-dev text-white d-flex justify-content-between align-items-center" role="button" data-bs-toggle="collapse" data-bs-target="#exerciseCollapse">
+            <h6 class="mb-0">🤸 Baby Exercises</h6>
+            <span class="collapse-icon">▼</span>
+        </div>
+        <div id="exerciseCollapse" class="collapse show">
+            <div class="card-body" id="exercisesContent"></div>
+        </div>
+    </div>
+
+</div>

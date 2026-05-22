@@ -1,0 +1,16 @@
+<!-- Date picker with navigation -->
+<div class="card mb-4">
+    <div class="card-body">
+        <div class="d-flex justify-content-between align-items-center">
+            <h5 class="card-title mb-0">Events Timeline</h5>
+            <div class="d-flex align-items-center gap-1">
+                <button class="btn btn-outline-secondary btn-sm px-2" onclick="changeEventDate(-1)" title="Previous day">◀</button>
+                <input type="date" class="form-control form-control-sm w-auto" id="eventDateFilter" onchange="loadEvents()">
+                <button class="btn btn-outline-secondary btn-sm px-2" onclick="changeEventDate(1)" title="Next day">▶</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Events list -->
+<div id="eventsList"></div>
