@@ -111,7 +111,21 @@ function setDefaultTimes() {
     document.getElementById('endTime').value = toLocalTime(now);
 }
 
-document.addEventListener('DOMContentLoaded', () => {
+document.addEventListener('DOMContentLoaded', async () => {
+    // ── Load tab partials ──
+    await Promise.all([
+        { id: 'milkPane',        url: '/static/tabs/tab-feeding.html' },
+        { id: 'sleepPane',       url: '/static/tabs/tab-sleep.html' },
+        { id: 'diaperPane',      url: '/static/tabs/tab-diaper.html' },
+        { id: 'bathPane',        url: '/static/tabs/tab-bath.html' },
+        { id: 'eventPane',       url: '/static/tabs/tab-event.html' },
+        { id: 'developmentPane', url: '/static/tabs/tab-development.html' },
+        { id: 'insightsPane',    url: '/static/tabs/tab-insights.html' },
+    ].map(async ({ id, url }) => {
+        const res = await fetch(url);
+        document.getElementById(id).innerHTML = await res.text();
+    }));
+
     setDefaultTimes();
     // Default month picker to current month
     const now = new Date();
@@ -1070,7 +1084,7 @@ function renderEvents(feedings, sleeps, diapers, baths, date) {
         feedings.forEach(f => {
             events.push({
                 type: 'feeding',
-                startTime: f.start_time,
+                startTime: f.end_time,
                 endTime: f.end_time,
                 detail: `${f.amount_ml} ml`,
                 badgeClass: 'bg-primary',
